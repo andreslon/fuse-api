@@ -8,6 +8,65 @@ Fuse API is a modern, scalable REST API built with NestJS to interact with finan
 - **API Key**: `fuse-api-key-a1b2c3d4e5f6` (required for all endpoints except `/`, `/health`, and `/health/redis`)
 - **Monitoring Dashboard**: [https://monitoring.neobit.com.co/d/d3d1922e-3022-4e99-9440-f7af0a584834/fuse-api-dashboard](https://monitoring.neobit.com.co/d/d3d1922e-3022-4e99-9440-f7af0a584834/fuse-api-dashboard?orgId=1)
 
+## Architecture Diagram
+
+![Fuse API Architecture](https://raw.githubusercontent.com/andreslon/fuse-api/main/docs/architecture.png)
+
+### System Architecture Overview
+
+The Fuse API architecture follows a modern cloud-native design with multiple layers:
+
+#### Development Layer
+- **VS Code (IDE)**: Development environment where code is written and tested
+- **Source Code**: Code repository containing the NestJS application
+- **GitHub Actions**: CI/CD pipeline for automated testing, building and deployment
+
+#### Infrastructure Layer
+- **Container Registry**: Azure Container Registry stores Docker images of the application
+- **Kubernetes**: Orchestrates the deployment of containers in Azure Kubernetes Service (AKS)
+- **Virtual Network**: Secures communication between services
+- **Resource Group**: Logical container for Azure resources
+- **Cloudflare**: Provides DNS, SSL termination, and WAF (Web Application Firewall)
+- **Certificate Authority**: Manages TLS certificates
+- **Microsoft Azure**: Cloud platform hosting all services
+
+#### Application Layer
+- **Fuse-API**: The core NestJS application with x-api-key authentication
+- **Service-A and Service-B**: Microservices within the Kubernetes cluster
+- **Pods**: Individual containers running the application components
+- **Ingress Controller**: Routes external traffic to the appropriate services
+- **Secrets**: Securely stores sensitive information like API keys and passwords
+
+#### Data Layer
+- **PostgreSQL**: Managed database for persistent storage of transactions and user data
+- **Cache**: Redis instance for fast data retrieval and caching of stock information
+- **Apache Pulsar**: Message broker for event-driven architecture
+
+#### Integration Layer
+- **Sendgrid (Emails)**: Service for sending daily report emails
+- **Fuse Finance API**: External API providing stock data
+- **Monitoring Stack**: Grafana, Loki, and Prometheus for observability
+
+### Data Flow
+1. Client devices connect to Fuse API through Cloudflare with x-api-key authentication
+2. Requests are routed to the appropriate service via the Ingress Controller in Kubernetes
+3. The Fuse API services process requests, accessing:
+   - PostgreSQL for persistent data
+   - Redis for cached responses
+   - Apache Pulsar for event publishing
+4. External integrations include:
+   - Retrieving stock data from Fuse Finance API
+   - Sending emails through Sendgrid
+5. Monitoring is provided via Grafana dashboards
+
+### CI/CD Pipeline
+The deployment process follows these steps:
+1. Code is written in VS Code and pushed to source control
+2. GitHub Actions trigger automated builds
+3. Docker images are built and pushed to Azure Container Registry
+4. Kubernetes pulls the images and deploys the updated services
+5. Secrets are securely managed throughout the process
+
 ## Installation
 
 ### Prerequisites
@@ -50,19 +109,19 @@ REPORT_RECIPIENT_EMAIL=andres.londono@neobit.com.co
 CRON_REPORT_EXPRESSION=0 12 * * *
 
 # Cache configuration
-REDIS_HOST=fuse-redis.redis.cache.windows.net
+REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_PASSWORD='Lp6gXzDLj3UnWAAYeqalvSx2NyXRN2e4yAzCaGasPyU='
+REDIS_PASSWORD=your_redis_password
 REDIS_CACHE_TTL=300000  # 5 minutes in milliseconds
 
 # Message broker configuration
 PULSAR_URL=pulsar://localhost:6650
 
 # Database configuration
-DATABASE_HOST=fuse-pgsql.postgres.database.azure.com
+DATABASE_HOST=localhost
 DATABASE_PORT=5432
-DATABASE_USERNAME=usradmin
-DATABASE_PASSWORD=95GNPi1kF&dH1pHc
+DATABASE_USERNAME=postgres
+DATABASE_PASSWORD=your_db_password
 DATABASE_NAME=fuse_db
 DATABASE_SYNCHRONIZE=true
 DATABASE_LOGGING=true
