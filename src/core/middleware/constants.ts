@@ -1,0 +1,1 @@
+export const API_KEY = 'fuse-api-key-a1b2c3d4e5f6'; 

@@ -39,17 +39,24 @@ async function bootstrap() {
       .setTitle(SWAGGER_TITLE)
       .setDescription(SWAGGER_DESCRIPTION)
       .setVersion(SWAGGER_VERSION)
-      .addBearerAuth()
+      .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
       .addServer(`/${API_PREFIX}`)
       .build();
     
     const document = SwaggerModule.createDocument(app, config);
     
-    // Serve Swagger UI at the root path and at the specific Swagger path
-    SwaggerModule.setup('', app, document);
-    SwaggerModule.setup(SWAGGER_PATH, app, document);
+    // Make API key required for all endpoints in Swagger
+    document.security = [{ 'x-api-key': [] }];
     
-    // Set global prefix AFTER Swagger setup to avoid prefix for Swagger UI
+    // Serve Swagger UI without global prefix
+    SwaggerModule.setup('', app, document, {
+      useGlobalPrefix: false,
+    });
+    SwaggerModule.setup(SWAGGER_PATH, app, document, {
+      useGlobalPrefix: false,
+    });
+    
+    // Set global prefix after Swagger setup
     app.setGlobalPrefix(API_PREFIX);
 
     // Log Redis configuration
