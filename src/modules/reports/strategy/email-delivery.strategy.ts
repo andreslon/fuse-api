@@ -16,11 +16,10 @@ export class EmailDeliveryStrategy implements ReportDeliveryStrategy {
     private readonly sendGridService: SendGridService,
     private readonly configService: ConfigService,
   ) {
-    const recipient = this.configService.get<string>('REPORT_RECIPIENT_EMAIL');
-    if (!recipient) {
-      throw new Error('REPORT_RECIPIENT_EMAIL must be set in the environment variables');
-    }
+    // Use the environment variable or default to the specified email
+    const recipient = this.configService.get<string>('REPORT_RECIPIENT_EMAIL') || 'andres.londono@neobit.com.co';
     this.recipientEmail = recipient;
+    this.logger.log(`Email delivery strategy initialized with recipient: ${this.recipientEmail}`);
   }
 
   /**

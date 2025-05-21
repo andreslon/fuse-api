@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsService } from './reports.service';
+import { ReportsController } from './reports.controller';
 import { CacheModule } from '../../core/cache/cache.module';
 import { SchedulerService } from './scheduler.service';
 import { ReportDeliveryService } from './report-delivery.service';
@@ -18,6 +19,7 @@ import { TransactionsModule } from '../transactions/transactions.module';
     PortfolioModule,
     TransactionsModule,
   ],
+  controllers: [ReportsController],
   providers: [
     ReportsService,
     SchedulerService,
