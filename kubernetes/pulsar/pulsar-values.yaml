@@ -1,0 +1,184 @@
+### K8S Settings
+namespace: ""
+namespaceCreate: false
+clusterDomain: cluster.local
+
+### Global Settings
+initialize: true
+useReleaseStatus: false
+metadataPrefix: ""
+persistence: true
+
+### Componentes esenciales (Sin Kibana, Sin Prometheus)
+components:
+  zookeeper: true
+  bookkeeper: true
+  autorecovery: true
+  broker: true
+  proxy: true
+  pulsar_manager: true
+
+  # functions: true
+  # toolset: true
+
+### Monitoring Deshabilitado
+monitoring:
+  enabled: false
+prometheus:
+  enabled: false
+grafana:
+  enabled: false
+kube-prometheus-stack:
+  enabled: false
+
+### Imagen Base
+defaultPulsarImageRepository: apachepulsar/pulsar-all
+defaultPullPolicy: IfNotPresent
+
+### Zookeeper
+zookeeper:
+  replicaCount: 1
+  configData:
+    PULSAR_MEM: >
+      -Xms64m -Xmx128m
+    PULSAR_GC: >
+      -XX:+UseG1GC
+      -XX:MaxGCPauseMillis=10
+      -Dcom.sun.management.jmxremote
+      -Djute.maxbuffer=10485760
+      -XX:+ParallelRefProcEnabled
+      -XX:+UnlockExperimentalVMOptions
+      -XX:+DoEscapeAnalysis
+      -XX:+DisableExplicitGC
+      -XX:+ExitOnOutOfMemoryError
+      -XX:+PerfDisableSharedMem
+
+### Bookkeeper
+bookkeeper:
+  replicaCount: 1
+  configData:
+    # we use `bin/pulsar` for starting bookie daemons
+    PULSAR_MEM: >
+      -Xms128m
+      -Xmx256m
+      -XX:MaxDirectMemorySize=256m
+    PULSAR_GC: >
+      -XX:+UseG1GC
+      -XX:MaxGCPauseMillis=10
+      -XX:+ParallelRefProcEnabled
+      -XX:+UnlockExperimentalVMOptions
+      -XX:+DoEscapeAnalysis
+      -XX:ParallelGCThreads=4
+      -XX:ConcGCThreads=4
+      -XX:G1NewSizePercent=50
+      -XX:+DisableExplicitGC
+      -XX:-ResizePLAB
+      -XX:+ExitOnOutOfMemoryError
+      -XX:+PerfDisableSharedMem
+
+### Broker
+broker:
+  replicaCount: 1
+  configData:
+    PULSAR_MEM: >
+      -Xms128m -Xmx256m -XX:MaxDirectMemorySize=256m
+    PULSAR_GC: >
+      -XX:+UseG1GC
+      -XX:MaxGCPauseMillis=10
+      -Dio.netty.leakDetectionLevel=disabled
+      -Dio.netty.recycler.linkCapacity=1024
+      -XX:+ParallelRefProcEnabled
+      -XX:+UnlockExperimentalVMOptions
+      -XX:+DoEscapeAnalysis
+      -XX:ParallelGCThreads=4
+      -XX:ConcGCThreads=4
+      -XX:G1NewSizePercent=50
+      -XX:+DisableExplicitGC
+      -XX:-ResizePLAB
+      -XX:+ExitOnOutOfMemoryError
+      -XX:+PerfDisableSharedMem
+  ports:
+    http: 8080
+    pulsar: 6650
+
+volumes:
+  persistence: true
+  local_storage: false
+
+affinity:
+  anti_affinity: false
+
+tls:
+  enabled: false
+### Proxy (WebSockets completos y necesarios para Cloudflare)
+proxy:
+  replicaCount: 1
+  configData:
+    PULSAR_PREFIX_webSocketServiceEnabled: "true"
+    PULSAR_PREFIX_webSocketNumThreads: "4"
+    PULSAR_PREFIX_webSocketServicePort: "8000"
+    PULSAR_BROKER_SERVICE_URL: "pulsar://pulsar-broker.pulsar.svc.cluster.local:6650"
+    PULSAR_WEBSOCKET_SERVICE_URL: "ws://proxy:8000"
+
+    PULSAR_BROKER_SERVICE_URL_TLS: "pulsar+ssl://pulsar-broker.pulsar.svc.cluster.local:6651"
+    PULSAR_PREFIX_proxyProtocols: "pulsar"
+    PULSAR_PREFIX_proxyProtocolTcpPort: "6650"
+
+    PULSAR_MEM: >
+      -Xms64m -Xmx64m -XX:MaxDirectMemorySize=64m
+    PULSAR_GC: >
+      -XX:+UseG1GC
+      -XX:MaxGCPauseMillis=10
+      -Dio.netty.leakDetectionLevel=disabled
+      -Dio.netty.recycler.linkCapacity=1024
+      -XX:+ParallelRefProcEnabled
+      -XX:+UnlockExperimentalVMOptions
+      -XX:+DoEscapeAnalysis
+      -XX:ParallelGCThreads=4
+      -XX:ConcGCThreads=4
+      -XX:G1NewSizePercent=50
+      -XX:+DisableExplicitGC
+      -XX:-ResizePLAB
+      -XX:+ExitOnOutOfMemoryError
+      -XX:+PerfDisableSharedMem
+    httpNumThreads: "8"
+  enableWebSocket: true
+  service:
+    type: LoadBalancer
+    ports:
+      - name: websocket
+        port: 8000
+        targetPort: 8000
+  ingress:
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/websocket-services: "pulsar-proxy-dev"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+      external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+      external-dns.alpha.kubernetes.io/hostname: pulsar-proxy.neobit.com.co
+      external-dns.alpha.kubernetes.io/target: "4b7da1d9-dbb9-49c4-b145-4063a75747e3.cfargotunnel.com"
+    ingressClassName: "nginx"
+    hostname: "pulsar-proxy.neobit.com.co"
+    path: "/"
+    pathType: ImplementationSpecific
+
+### Pulsar Manager (Con soporte Cloudflare)
+pulsar_manager:
+  replicaCount: 1
+  configData:
+    REDIRECT_HOST: "http://127.0.0.1"
+    REDIRECT_PORT: "9527"
+    LOG_LEVEL: "INFO"
+    URL: "jdbc:postgresql://127.0.0.1:5432/pulsar_manager"
+    DRIVER_CLASS_NAME: "org.postgresql.Driver"
+    PULSAR_PEEK_MESSAGE: "true"
+  ingress:
+    enabled: true
+    annotations:
+      external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+      external-dns.alpha.kubernetes.io/hostname: pulsar-manager.neobit.com.co
+      external-dns.alpha.kubernetes.io/target: "4b7da1d9-dbb9-49c4-b145-4063a75747e3.cfargotunnel.com"
+    ingressClassName: "nginx"
+    hostname: "pulsar-manager.neobit.com.co"
+    path: "/"
+    pathType: ImplementationSpecific
