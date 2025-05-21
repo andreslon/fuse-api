@@ -111,23 +111,24 @@ REPORT_RECIPIENT_EMAIL=andres.londono@neobit.com.co
 CRON_REPORT_EXPRESSION=0 12 * * *
 
 # Cache configuration
-REDIS_HOST=localhost
+REDIS_HOST=fuse-redis.redis.cache.windows.net
 REDIS_PORT=6379
-REDIS_PASSWORD=your_redis_password
+REDIS_PASSWORD='Lp6gXzDLj3UnWAAYeqalvSx2NyXRN2e4yAzCaGasPyU='
 REDIS_CACHE_TTL=300000  # 5 minutes in milliseconds
 
 # Message broker configuration
 PULSAR_URL=pulsar://localhost:6650
 
 # Database configuration
-DATABASE_HOST=localhost
+DATABASE_HOST=fuse-pgsql.postgres.database.azure.com
 DATABASE_PORT=5432
-DATABASE_USERNAME=postgres
-DATABASE_PASSWORD=your_db_password
+DATABASE_USERNAME=usradmin
+DATABASE_PASSWORD=95GNPi1kF&dH1pHc
 DATABASE_NAME=fuse_db
 DATABASE_SYNCHRONIZE=true
 DATABASE_LOGGING=true
-DATABASE_SSL_REJECT_UNAUTHORIZED=false
+DATABASE_SSL_REJECT_UNAUTHORIZED=false 
+ 
 ```
 
 4. Run the application:
