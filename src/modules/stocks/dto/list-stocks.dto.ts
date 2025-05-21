@@ -6,12 +6,12 @@ import { PaginationDto } from '../../../shared/pagination/pagination.util';
  * DTO for listing stocks with filtering and pagination
  */
 export class ListStocksDto extends PaginationDto {
-  @ApiProperty({ description: 'Filter by stock symbol', required: false, example: 'AAPL' })
+  @ApiProperty({ description: 'Filter by stock symbol', required: false })
   @IsOptional()
   @IsString()
   symbol?: string;
 
-  @ApiProperty({ description: 'Filter by market', required: false, example: 'NASDAQ' })
+  @ApiProperty({ description: 'Filter by market', required: false })
   @IsOptional()
   @IsString()
   market?: string;

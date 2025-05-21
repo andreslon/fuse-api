@@ -20,7 +20,7 @@ export class StocksController {
 
   @Get(':symbol')
   @ApiOperation({ summary: 'Get stock by symbol', description: 'Returns a single stock by its symbol' })
-  @ApiParam({ name: 'symbol', description: 'Stock symbol', example: 'AAPL' })
+  @ApiParam({ name: 'symbol', description: 'Stock symbol', required: true })
   @ApiResponse({ status: 200, description: 'Stock retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Stock not found' })
   async getStockBySymbol(@Param('symbol') symbol: string): Promise<StockDto> {

@@ -7,14 +7,14 @@ import { PaginatedResponseInterface, PaginationMeta } from './paginated-response
  * DTO for pagination query parameters
  */
 export class PaginationDto {
-  @ApiProperty({ description: 'Number of items to skip', required: false, default: 0, minimum: 0 })
+  @ApiProperty({ description: 'Number of items to skip', required: false, minimum: 0 })
   @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
   offset: number = 0;
 
-  @ApiProperty({ description: 'Maximum number of items to return', required: false, default: 10, minimum: 1 })
+  @ApiProperty({ description: 'Maximum number of items to return', required: false, minimum: 1 })
   @IsOptional()
   @IsNumber()
   @Min(1)

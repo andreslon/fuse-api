@@ -8,6 +8,21 @@ import { StockDto } from '../../stocks/dto/stock.dto';
 import axiosRetry from 'axios-retry';
 import { BaseAppException } from '../../../core/exceptions/base-app.exception';
 
+interface FuseApiStockResponse {
+  status: number;
+  data: {
+    items: Array<{
+      symbol: string;
+      name: string;
+      price: number;
+      sector: string;
+      change: number;
+      lastUpdated: string;
+    }>;
+    nextToken?: string;
+  };
+}
+
 @Injectable()
 export class FuseApiProvider implements ApiProvider {
   private readonly logger = new Logger(FuseApiProvider.name);
@@ -54,30 +69,75 @@ export class FuseApiProvider implements ApiProvider {
   }
 
   async getStocks(): Promise<StockDto[]> {
-    const url = `${this.baseUrl}/stocks`;
-    
-    const response = await this.makeRequest<{ stocks: StockDto[] }>(url);
-    return response.stocks;
+    try {
+      const url = `${this.baseUrl}/stocks`;
+      
+      const response = await this.makeRequest<FuseApiStockResponse>(url);
+      
+      // Validar la respuesta
+      if (!response || !response.data || !response.data.items) {
+        this.logger.error('Invalid response structure from Fuse API');
+        throw new Error('Invalid response structure from Fuse API');
+      }
+      
+      // Mapear la respuesta al formato esperado
+      const stocks: StockDto[] = response.data.items.map(item => ({
+        symbol: item.symbol,
+        name: item.name,
+        price: item.price,
+        market: item.sector || 'NASDAQ', // Usamos sector como market o default a NASDAQ
+        lastUpdated: new Date(item.lastUpdated)
+      }));
+      
+      this.logger.log(`Retrieved ${stocks.length} stocks from Fuse API`);
+      return stocks;
+    } catch (error) {
+      this.logger.error(`Failed to fetch stocks: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   async getStockPrice(symbol: string): Promise<number> {
     // For this implementation, we'll get the stock details which includes price
     const url = `${this.baseUrl}/stocks/${symbol}`;
     
-    const response = await this.makeRequest<{ price: number }>(url);
-    return response.price;
+    try {
+      const response = await this.makeRequest<{ status: number; data: { price: number } }>(url);
+      if (!response || !response.data || typeof response.data.price !== 'number') {
+        throw new Error(`Invalid price data for symbol ${symbol}`);
+      }
+      return response.data.price;
+    } catch (error) {
+      this.logger.error(`Failed to get price for ${symbol}: ${error.message}`);
+      throw error;
+    }
   }
 
   async buyStock(symbol: string, quantity: number): Promise<{ id: string; status: string }> {
     const url = `${this.baseUrl}/stocks/${symbol}/buy`;
     
-    const response = await this.makeRequest<{ id: string; status: string }>(
-      url,
-      'POST',
-      { quantity },
-    );
-    
-    return response;
+    try {
+      const response = await this.makeRequest<{ 
+        status: number; 
+        data: { id: string; status: string } 
+      }>(
+        url,
+        'POST',
+        { quantity },
+      );
+      
+      if (!response || !response.data || !response.data.id) {
+        throw new Error(`Invalid buy response for symbol ${symbol}`);
+      }
+      
+      return {
+        id: response.data.id,
+        status: response.data.status || 'completed'
+      };
+    } catch (error) {
+      this.logger.error(`Failed to buy stock ${symbol}: ${error.message}`);
+      throw error;
+    }
   }
 
   private async makeRequest<T>(
@@ -88,6 +148,7 @@ export class FuseApiProvider implements ApiProvider {
     const config: AxiosRequestConfig = {
       headers: {
         'x-api-key': this.apiKey,
+        'Accept': 'application/json'
       },
     };
 
