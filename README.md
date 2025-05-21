@@ -1,89 +1,92 @@
 # Fuse API
 
-A modern, scalable NestJS-based backend API with a modular architecture and best practices.
+A NestJS-based API for stock trading with clean architecture principles.
 
-## 🚀 Features
+## Features
 
-- Modular architecture with clear separation of concerns
-- Environment configuration with validation
-- Structured logging with Pino
-- Redis caching
-- Message queue with Pulsar
-- Email service with SendGrid
-- Global exception handling
-- Shared utilities and DTOs
+- **List available stocks** (`GET /api/v1/stocks`)
+- **View user portfolio** (`GET /api/v1/portfolio/:userId`)
+- **Buy stocks** (`POST /api/v1/transactions/buy`)
+- **Daily email reports** with transaction summaries
 
-## 📋 Prerequisites
+## Environment Variables
 
-- Node.js (v18 or higher)
-- Redis
-- Pulsar
-- SendGrid API Key
+Configure the application using the following environment variables:
 
-## 🛠️ Installation
+```
+# Server configuration
+PORT=3000
 
-1. Clone the repository:
-```bash
-git clone https://github.com/andreslon/fuse-api.git
-cd fuse-api
+# Vendor API configuration
+VENDOR_API_BASE_URL=https://api.challenge.fusefinance.com
+VENDOR_API_KEY=your_api_key_here
+
+# Email configuration
+SENDGRID_API_KEY=your_sendgrid_api_key_here
+SENDER_EMAIL=report@fuseapi.com
+REPORT_RECIPIENT_EMAIL=admin@example.com
+
+# Scheduler configuration
+CRON_REPORT_EXPRESSION=0 20 * * *  # Run at 8:00 PM every day
 ```
 
+## Installation
+
+1. Clone the repository
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Create a `.env` file in the root directory with the following variables:
-```env
-# App
-NODE_ENV=development
-PORT=3000
+3. Create a `.env` file with the required environment variables
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+## Running the Application
 
-# Pulsar
-PULSAR_URL=pulsar://localhost:6650
-
-# SendGrid
-SENDGRID_API_KEY=your_api_key
-```
-
-## 🏃‍♂️ Running the App
+### Development
 
 ```bash
-# Development
 npm run start:dev
+```
 
-# Production
+### Production
+
+```bash
 npm run build
 npm run start:prod
 ```
 
-## 📁 Project Structure
+## API Documentation
 
-```
-src/
-├── config/           # Configuration and environment variables
-├── core/            # Core modules (logger, cache, queue, etc.)
-├── modules/         # Feature modules
-└── shared/          # Shared resources (DTOs, interfaces, utils)
-```
+Once the application is running, access the Swagger documentation at:
 
-## 🧪 Testing
+- http://localhost:3000 (root)
+- http://localhost:3000/docs (explicit path)
 
-```bash
-# Unit tests
-npm run test
+## Architecture
 
-# e2e tests
-npm run test:e2e
+This project follows clean architecture principles:
 
-# Test coverage
-npm run test:cov
-```
+- **Modules**: Feature-focused modules for different business domains
+- **DTOs**: Clear data transfer objects for request/response handling
+- **Services**: Business logic separated from controllers
+- **Repository Pattern**: Abstract data access
+- **Strategy Pattern**: Used for report delivery mechanisms
+- **Exception Handling**: Centralized exception filters and custom exceptions
 
-## 📝 License
+## Key Components
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- **Stock Module**: List available stocks
+- **Portfolio Module**: Manage user portfolios
+- **Transaction Module**: Handle buy operations with price tolerance checks
+- **Vendor Integration**: External API connection with resilience patterns
+- **Report Module**: Generates and sends daily reports via email
+
+## Technical Features
+
+- **Validation**: Request validation with class-validator
+- **Caching**: Redis-based caching for performance
+- **Logging**: Structured logging
+- **Resilience**: Circuit breakers, retries, and timeouts
+- **Scheduling**: Automated tasks using cron expressions
+- **Documentation**: Swagger/OpenAPI docs for API endpoints

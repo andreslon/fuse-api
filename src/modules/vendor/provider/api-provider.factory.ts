@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ApiProvider } from './api-provider.interface';
 import { MockApiProvider } from './mock-api.provider';
+import { FuseApiProvider } from './fuse-api.provider';
 
 /**
  * Factory for creating API providers
@@ -12,12 +13,16 @@ export class ApiProviderFactory {
   private readonly providers = new Map<string, ApiProvider>();
   private defaultProvider: string;
 
-  constructor(private readonly mockApiProvider: MockApiProvider) {
+  constructor(
+    private readonly mockApiProvider: MockApiProvider,
+    private readonly fuseApiProvider: FuseApiProvider,
+  ) {
     // Register providers
     this.registerProvider(mockApiProvider);
+    this.registerProvider(fuseApiProvider);
     
-    // Set default provider
-    this.defaultProvider = mockApiProvider.getName();
+    // Set default provider to Fuse API
+    this.defaultProvider = fuseApiProvider.getName();
   }
 
   /**

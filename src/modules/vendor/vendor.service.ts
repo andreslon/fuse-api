@@ -46,6 +46,26 @@ export class VendorService {
   }
 
   /**
+   * Buy a stock
+   * @param symbol Stock symbol
+   * @param quantity Quantity to buy
+   */
+  async buyStock(symbol: string, quantity: number): Promise<{ id: string; status: string }> {
+    return this.circuitBreaker.executeWithBreaker(
+      `buyStock-${symbol}`,
+      async () => {
+        const provider = this.apiProviderFactory.getProvider();
+        this.logger.log(`Buying ${quantity} shares of ${symbol} via provider: ${provider.getName()}`);
+        
+        // Call the provider's buyStock method
+        // This is a type assertion since we know FuseApiProvider has this method
+        // but it's not in the interface yet to maintain compatibility
+        return (provider as any).buyStock(symbol, quantity);
+      }
+    );
+  }
+
+  /**
    * Get a list of available API providers
    */
   getAvailableProviders(): string[] {

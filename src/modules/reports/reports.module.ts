@@ -6,11 +6,17 @@ import { SchedulerService } from './scheduler.service';
 import { ReportDeliveryService } from './report-delivery.service';
 import { EmailDeliveryStrategy } from './strategy/email-delivery.strategy';
 import { InAppDeliveryStrategy } from './strategy/in-app-delivery.strategy';
+import { MessagingModule } from '../../core/messaging/messaging.module';
+import { PortfolioModule } from '../portfolio/portfolio.module';
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     CacheModule,
+    MessagingModule,
+    PortfolioModule,
+    TransactionsModule,
   ],
   providers: [
     ReportsService,

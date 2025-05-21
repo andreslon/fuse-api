@@ -70,6 +70,34 @@ export class StocksService {
     return stock;
   }
 
+  /**
+   * Get the current price for a stock
+   * @param symbol Stock symbol
+   * @returns Current price
+   */
+  async getStockPrice(symbol: string): Promise<number> {
+    try {
+      // First try to get from cached stocks
+      const cachedStock = await this.getStockBySymbol(symbol);
+      if (cachedStock) {
+        return cachedStock.price;
+      }
+
+      // If not in cache or more up-to-date price needed, get from vendor API
+      this.logger.log(`Fetching current price for ${symbol} from vendor API`);
+      const price = await this.vendorService.getStockPrice(symbol);
+      
+      return price;
+    } catch (error) {
+      if (error instanceof StockNotFoundException) {
+        throw error;
+      }
+      
+      this.logger.error(`Failed to get price for ${symbol}: ${error.message}`);
+      throw new StockServiceUnavailableException();
+    }
+  }
+
   private filterStocks(stocks: StockDto[], queryParams: ListStocksDto): StockDto[] {
     let filteredStocks = [...stocks];
     

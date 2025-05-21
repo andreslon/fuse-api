@@ -1,17 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ReportDeliveryStrategy } from './report-delivery-strategy.interface';
 import { PortfolioDto } from '../../portfolio/dto/portfolio.dto';
+import { SendGridService } from '../../../core/messaging/email/sendgrid.service';
 
 /**
- * Email delivery strategy for sending portfolio reports
- * In a real application, this would use a proper email service
+ * Email delivery strategy for sending reports via SendGrid
  */
 @Injectable()
 export class EmailDeliveryStrategy implements ReportDeliveryStrategy {
   private readonly logger = new Logger(EmailDeliveryStrategy.name);
+  private readonly recipientEmail: string;
+
+  constructor(
+    private readonly sendGridService: SendGridService,
+    private readonly configService: ConfigService,
+  ) {
+    const recipient = this.configService.get<string>('REPORT_RECIPIENT_EMAIL');
+    if (!recipient) {
+      throw new Error('REPORT_RECIPIENT_EMAIL must be set in the environment variables');
+    }
+    this.recipientEmail = recipient;
+  }
 
   /**
-   * Send portfolio report via email
+   * Send transaction report via email
    */
   async deliverReport(
     userId: string, 
@@ -19,17 +32,20 @@ export class EmailDeliveryStrategy implements ReportDeliveryStrategy {
     portfolio: PortfolioDto,
   ): Promise<boolean> {
     try {
-      // In a real application, you would inject and use a proper email service here
-      // For example: await this.mailService.sendEmail({ to: user.email, subject: 'Your Daily Portfolio Report', html: content });
+      this.logger.log(`Sending email report to ${this.recipientEmail} for user ${userId}`);
       
-      this.logger.log(`[MOCK] Email report sent to ${userId} with portfolio value: $${portfolio.totalValue.toFixed(2)}`);
+      // Send the email using SendGrid
+      await this.sendGridService.sendEmail({
+        to: this.recipientEmail,
+        subject: `Daily Transaction Report for ${userId}`,
+        html: content,
+        text: this.createTextVersion(content, portfolio),
+      });
       
-      // Simulate email sending
-      await this.mockSendEmail(userId, content);
-      
+      this.logger.log(`Email report sent successfully to ${this.recipientEmail}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send email report to ${userId}: ${error.message}`);
+      this.logger.error(`Failed to send email report: ${error.message}`, error.stack);
       return false;
     }
   }
@@ -42,15 +58,18 @@ export class EmailDeliveryStrategy implements ReportDeliveryStrategy {
   }
   
   /**
-   * Mock email sending function
-   * @param userId User to send to
-   * @param content Email content
+   * Create a plain text version of the email for clients that don't support HTML
    */
-  private async mockSendEmail(userId: string, content: string): Promise<void> {
-    // Simulate network latency
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Log success
-    this.logger.debug(`Email delivery simulation: ${content.substring(0, 50)}...`);
+  private createTextVersion(htmlContent: string, portfolio: PortfolioDto): string {
+    // Simple text version that just extracts key information
+    return `
+Daily Transaction Report for ${portfolio.userId}
+Generated: ${new Date().toLocaleString()}
+Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}
+
+Number of Holdings: ${portfolio.holdings.length}
+
+This is an automated report. Please do not reply to this email.
+    `.trim();
   }
 } 

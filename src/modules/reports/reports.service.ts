@@ -1,109 +1,130 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CacheService } from '../../core/cache/cache.service';
-import { PortfolioDto } from '../portfolio/dto/portfolio.dto';
+import { PortfolioService } from '../portfolio/portfolio.service';
+import { TransactionsService } from '../transactions/transactions.service';
+import { ReportDeliveryService } from './report-delivery.service';
+import { TransactionDto } from '../transactions/dto/transaction.dto';
+import { generateDailyReportHtml } from './templates/daily-report.template';
 
+/**
+ * Service for generating and sending reports
+ */
 @Injectable()
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
-  private readonly PORTFOLIO_CACHE_PREFIX = 'portfolio:';
+  private readonly REPORT_CACHE_KEY = 'daily_report_last_run';
   
-  constructor(private readonly cacheService: CacheService) {}
+  constructor(
+    private readonly portfolioService: PortfolioService,
+    private readonly transactionsService: TransactionsService,
+    private readonly reportDeliveryService: ReportDeliveryService,
+  ) {}
 
   /**
-   * Generate daily portfolio reports for all users
-   * Gets user portfolios from cache and generates report content
-   * In a real application, this would send emails via a mail service
+   * Generate daily transaction reports and send them
+   * Collects transaction data and sends via configured delivery methods
    */
   async generateDailyReports(): Promise<void> {
-    this.logger.log('Generating daily reports');
+    this.logger.log('Generating daily transaction reports');
     
     try {
       // In a real implementation, you would:
       // 1. Query users from a database
-      // 2. Get their portfolios
+      // 2. Get their transactions for the reporting period
       // 3. Generate report content
-      // 4. Send emails using a mail service
+      // 4. Send via configured delivery strategies
       
-      // For this example, we'll just simulate it with cache data
-      // Simulate getting portfolios from cache for all users
-      // In a real app, you'd get user IDs from a database
+      // For this example, we'll use demo users
       const userIds = await this.getDemoUserIds();
       
+      let successCount = 0;
+      let failureCount = 0;
+      
       for (const userId of userIds) {
-        await this.generateAndSendReport(userId);
+        const success = await this.generateAndSendReport(userId);
+        if (success) {
+          successCount++;
+        } else {
+          failureCount++;
+        }
       }
       
-      this.logger.log(`Generated reports for ${userIds.length} users`);
+      this.logger.log(`Reports generation complete. Success: ${successCount}, Failures: ${failureCount}`);
     } catch (error) {
-      this.logger.error(`Error generating daily reports: ${error.message}`);
+      this.logger.error(`Error generating daily reports: ${error.message}`, error.stack);
       throw error;
     }
   }
   
   /**
    * Generate and send a report for a specific user
+   * @param userId User ID
+   * @returns Boolean indicating success
    */
-  private async generateAndSendReport(userId: string): Promise<void> {
+  private async generateAndSendReport(userId: string): Promise<boolean> {
     try {
-      const cacheKey = `${this.PORTFOLIO_CACHE_PREFIX}${userId}`;
-      const portfolio = await this.cacheService.get<PortfolioDto>(cacheKey);
+      this.logger.log(`Generating report for user: ${userId}`);
       
-      if (portfolio) {
-        const reportContent = this.generateReportContent(portfolio);
-        this.logger.log(`Report for ${userId} generated`);
-        
-        // In a real app, you would send this via email
-        // await this.mailService.sendMail({...});
-        this.mockSendEmail(userId, reportContent);
+      // 1. Get user portfolio
+      const portfolio = await this.portfolioService.getPortfolio(userId);
+      
+      // 2. Get user transactions (in a real app, you'd filter by date range)
+      const transactions = await this.transactionsService.getTransactionsByUserId(userId);
+      
+      // 3. Split transactions into successful and failed
+      const [successfulTransactions, failedTransactions] = this.categorizeTransactions(transactions);
+      
+      // 4. Generate HTML report
+      const reportContent = generateDailyReportHtml(
+        userId,
+        successfulTransactions,
+        failedTransactions,
+      );
+      
+      // 5. Send the report through all configured delivery methods
+      const deliveryResult = await this.reportDeliveryService.deliverReport(
+        userId,
+        reportContent,
+        portfolio,
+      );
+      
+      if (deliveryResult) {
+        this.logger.log(`Report for ${userId} delivered successfully`);
+        return true;
       } else {
-        this.logger.warn(`No portfolio found for user ${userId}`);
+        this.logger.warn(`Report delivery failed for ${userId}`);
+        return false;
       }
     } catch (error) {
-      this.logger.error(`Error generating report for user ${userId}: ${error.message}`);
+      this.logger.error(`Error generating report for user ${userId}: ${error.message}`, error.stack);
+      return false;
     }
   }
   
   /**
-   * Generate HTML report content for a portfolio
+   * Categorize transactions into successful and failed
    */
-  private generateReportContent(portfolio: PortfolioDto): string {
-    // In a real app, you'd create HTML or text template for emails
-    return `
-      <h1>Portfolio Summary for ${portfolio.userId}</h1>
-      <div>
-        <p><strong>Total Value:</strong> $${portfolio.totalValue.toFixed(2)}</p>
-        <p><strong>Current Value:</strong> $${portfolio.totalValue.toFixed(2)}</p>
-        
-        <h2>Holdings:</h2>
-        <ul>
-        ${portfolio.holdings.map(holding => {
-          // Calculate an estimated value based on quantity and average price
-          const estimatedValue = holding.quantity * holding.averagePrice;
-          
-          return `<li>
-            <strong>${holding.symbol}:</strong> ${holding.quantity} shares<br>
-            Average Price: $${holding.averagePrice.toFixed(2)}<br>
-            Estimated Value: $${estimatedValue.toFixed(2)}
-          </li>`;
-        }).join('')}
-        </ul>
-      </div>
-    `;
+  private categorizeTransactions(transactions: TransactionDto[]): [TransactionDto[], TransactionDto[]] {
+    // In a real application, you might have a status field to determine success/failure
+    // For this example, we'll assume transactions with price > 0 are successful
+    const successful: TransactionDto[] = [];
+    const failed: TransactionDto[] = [];
+    
+    for (const transaction of transactions) {
+      if (transaction.price > 0) {
+        successful.push(transaction);
+      } else {
+        failed.push(transaction);
+      }
+    }
+    
+    return [successful, failed];
   }
   
   /**
-   * Mock method to get demo user IDs - in a real app, this would query a database
+   * Get demo user IDs - in a real app, this would query a database
    */
   private async getDemoUserIds(): Promise<string[]> {
     // In a real app, you would fetch user IDs from a database
     return ['user1', 'user2', 'user3'];
-  }
-  
-  /**
-   * Mock method to simulate sending an email - in a real app, this would call an email service
-   */
-  private mockSendEmail(userId: string, content: string): void {
-    this.logger.log(`[MOCK] Email sent to ${userId}`);
-    // In a real app: await this.emailService.send(userId, 'Your Daily Portfolio Report', content);
   }
 } 

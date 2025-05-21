@@ -11,6 +11,8 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { VendorModule } from './modules/vendor/vendor.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -27,5 +29,7 @@ import { VendorModule } from './modules/vendor/vendor.module';
     ReportsModule,
     VendorModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}
