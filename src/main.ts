@@ -10,6 +10,7 @@ import {
   SWAGGER_PATH,
   API_PREFIX,
 } from './shared/constants/app.constants';
+import { GlobalExceptionFilter } from './core/exceptions/global-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,8 +25,14 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
+
+  // Global exception filter
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Swagger documentation
   const config = new DocumentBuilder()

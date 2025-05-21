@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { catchError, firstValueFrom, retry, timeout } from 'rxjs';
+import { catchError, concat, firstValueFrom, Observable, of, throwError, timer } from 'rxjs';
+import { mergeMap, timeout, retry, delay } from 'rxjs/operators';
 import { AxiosError, AxiosResponse } from 'axios';
+import { StockServiceUnavailableException } from '../../core/exceptions/domain/stock.exceptions';
+import { TransactionFailedException } from '../../core/exceptions/domain/transaction.exceptions';
 
 @Injectable()
 export class VendorService {
@@ -9,6 +12,7 @@ export class VendorService {
   private readonly baseUrl = 'https://api.challenge.fusefinance.com';
   private readonly timeoutMs = 5000; // 5 seconds
   private readonly maxRetries = 3;
+  private readonly initialDelay = 1000; // 1 second
 
   constructor(private readonly httpService: HttpService) {}
 
@@ -19,10 +23,21 @@ export class VendorService {
       const { data } = await firstValueFrom<AxiosResponse>(
         this.httpService.get(url).pipe(
           timeout(this.timeoutMs),
-          retry(this.maxRetries),
+          retry({
+            count: this.maxRetries,
+            delay: (error, retryCount) => {
+              if (this.isClientError(error)) {
+                return throwError(() => error);
+              }
+              
+              const delay = this.initialDelay * Math.pow(2, retryCount - 1);
+              this.logger.log(`Retrying getStocks after ${delay}ms (attempt ${retryCount}/${this.maxRetries})`);
+              return timer(delay);
+            }
+          }),
           catchError((error: AxiosError) => {
             this.logger.error(`Failed to fetch stocks: ${error.message}`);
-            throw error;
+            throw new StockServiceUnavailableException();
           }),
         ),
       );
@@ -30,7 +45,7 @@ export class VendorService {
       return data;
     } catch (error) {
       this.logger.error(`Failed to get stocks after retries: ${error.message}`);
-      throw error;
+      throw new StockServiceUnavailableException();
     }
   }
 
@@ -41,10 +56,21 @@ export class VendorService {
       const { data } = await firstValueFrom<AxiosResponse>(
         this.httpService.post(url, { userId, quantity }).pipe(
           timeout(this.timeoutMs),
-          retry(this.maxRetries),
+          retry({
+            count: this.maxRetries,
+            delay: (error, retryCount) => {
+              if (this.isClientError(error)) {
+                return throwError(() => error);
+              }
+              
+              const delay = this.initialDelay * Math.pow(2, retryCount - 1);
+              this.logger.log(`Retrying buyStock after ${delay}ms (attempt ${retryCount}/${this.maxRetries})`);
+              return timer(delay);
+            }
+          }),
           catchError((error: AxiosError) => {
             this.logger.error(`Failed to buy stock ${symbol}: ${error.message}`);
-            throw error;
+            throw new TransactionFailedException(symbol, error.message);
           }),
         ),
       );
@@ -52,7 +78,14 @@ export class VendorService {
       return data;
     } catch (error) {
       this.logger.error(`Failed to buy stock ${symbol} after retries: ${error.message}`);
-      throw error;
+      if (error instanceof TransactionFailedException) {
+        throw error;
+      }
+      throw new TransactionFailedException(symbol, 'Transaction failed due to service unavailability');
     }
+  }
+
+  private isClientError(error: any): boolean {
+    return error?.response?.status >= 400 && error?.response?.status < 500;
   }
 } 

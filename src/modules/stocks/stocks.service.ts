@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { VendorService } from '../vendor/vendor.service';
 import { CacheService } from '../../core/cache/cache.service';
 import { StockDto } from './dto/stock.dto';
+import { StockNotFoundException, StockServiceUnavailableException } from '../../core/exceptions/domain/stock.exceptions';
+import { ListStocksDto } from './dto/list-stocks.dto';
+import { PaginatedResponse, createPaginatedResponse } from '../../shared/pagination/pagination.util';
 
 @Injectable()
 export class StocksService {
@@ -14,22 +17,82 @@ export class StocksService {
     private readonly cacheService: CacheService,
   ) {}
 
-  async getStocks(): Promise<StockDto[]> {
-    // Try to get stocks from cache first
-    const cachedStocks = await this.cacheService.get<StockDto[]>(this.CACHE_KEY);
-    
-    if (cachedStocks) {
-      this.logger.log('Returning stocks from cache');
-      return cachedStocks;
+  async getPaginatedStocks(queryParams: ListStocksDto): Promise<PaginatedResponse<StockDto>> {
+    try {
+      const stocks = await this.getStocks();
+      const filteredStocks = this.filterStocks(stocks, queryParams);
+      const paginatedStocks = this.paginateStocks(filteredStocks, queryParams);
+      
+      return createPaginatedResponse(
+        paginatedStocks,
+        filteredStocks.length,
+        queryParams,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to get paginated stocks: ${error.message}`);
+      throw new StockServiceUnavailableException();
     }
+  }
 
-    // If not in cache, fetch from API
-    this.logger.log('Fetching stocks from API');
-    const stocks = await this.vendorService.getStocks();
+  async getStocks(): Promise<StockDto[]> {
+    try {
+      // Try to get stocks from cache first
+      const cachedStocks = await this.cacheService.get<StockDto[]>(this.CACHE_KEY);
+      
+      if (cachedStocks) {
+        this.logger.log('Returning stocks from cache');
+        return cachedStocks;
+      }
+
+      // If not in cache, fetch from API
+      this.logger.log('Fetching stocks from API');
+      const stocks = await this.vendorService.getStocks();
+      
+      // Cache the results
+      await this.cacheService.set(this.CACHE_KEY, stocks, this.CACHE_TTL);
+      
+      return stocks;
+    } catch (error) {
+      this.logger.error(`Failed to fetch stocks: ${error.message}`);
+      throw new StockServiceUnavailableException();
+    }
+  }
+
+  async getStockBySymbol(symbol: string): Promise<StockDto> {
+    const stocks = await this.getStocks();
+    const stock = stocks.find(s => s.symbol === symbol);
     
-    // Cache the results
-    await this.cacheService.set(this.CACHE_KEY, stocks, this.CACHE_TTL);
+    if (!stock) {
+      throw new StockNotFoundException(symbol);
+    }
     
-    return stocks;
+    return stock;
+  }
+
+  private filterStocks(stocks: StockDto[], queryParams: ListStocksDto): StockDto[] {
+    let filteredStocks = [...stocks];
+    
+    // Filter by symbol if provided
+    if (queryParams.symbol && typeof queryParams.symbol === 'string') {
+      const symbolLower = queryParams.symbol.toLowerCase();
+      filteredStocks = filteredStocks.filter(stock => 
+        stock.symbol.toLowerCase().includes(symbolLower)
+      );
+    }
+    
+    // Filter by market if provided
+    if (queryParams.market && typeof queryParams.market === 'string') {
+      const marketLower = queryParams.market.toLowerCase();
+      filteredStocks = filteredStocks.filter(stock => 
+        stock.market.toLowerCase() === marketLower
+      );
+    }
+    
+    return filteredStocks;
+  }
+
+  private paginateStocks(stocks: StockDto[], queryParams: ListStocksDto): StockDto[] {
+    const { offset, limit } = queryParams;
+    return stocks.slice(offset, offset + limit);
   }
 } 

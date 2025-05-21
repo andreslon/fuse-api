@@ -1,57 +1,65 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { BuyStockDto } from './dto/buy-stock.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
 import { VendorService } from '../vendor/vendor.service';
 import { StocksService } from '../stocks/stocks.service';
-import { CacheService } from '../../core/cache/cache.service';
 import { PortfolioDto, PortfolioItemDto } from '../portfolio/dto/portfolio.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { TransactionRepository } from './repository/transaction.repository';
+import { PortfolioRepository } from '../portfolio/repository/portfolio.repository';
+import { StockNotFoundException } from '../../core/exceptions/domain/stock.exceptions';
+import { TransactionFailedException } from '../../core/exceptions/domain/transaction.exceptions';
+import { PortfolioUpdateFailedException } from '../../core/exceptions/domain/portfolio.exceptions';
 
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
-  private readonly PORTFOLIO_CACHE_PREFIX = 'portfolio:';
-  private readonly TRANSACTIONS_CACHE_PREFIX = 'transactions:';
 
   constructor(
     private readonly vendorService: VendorService,
     private readonly stocksService: StocksService,
-    private readonly cacheService: CacheService,
+    private readonly transactionRepository: TransactionRepository,
+    private readonly portfolioRepository: PortfolioRepository,
   ) {}
 
   async buyStock(buyStockDto: BuyStockDto): Promise<TransactionResponseDto> {
     const { userId, symbol, quantity } = buyStockDto;
     
-    // Check if stock exists
-    const stocks = await this.stocksService.getStocks();
-    const stock = stocks.find(s => s.symbol === symbol);
-    
-    if (!stock) {
-      throw new NotFoundException(`Stock with symbol ${symbol} not found`);
+    try {
+      // Check if stock exists
+      const stock = await this.stocksService.getStockBySymbol(symbol);
+      
+      // Execute purchase via vendor API
+      await this.vendorService.buyStock(symbol, userId, quantity);
+      
+      // Create transaction record
+      const transaction: TransactionResponseDto = {
+        id: uuidv4(),
+        userId,
+        symbol,
+        quantity,
+        price: stock.price,
+        totalAmount: stock.price * quantity,
+        timestamp: new Date(),
+        status: 'completed',
+      };
+      
+      // Update user's portfolio
+      await this.updatePortfolio(userId, symbol, quantity, stock.price);
+      
+      // Store transaction
+      return this.transactionRepository.save(transaction);
+    } catch (error) {
+      this.logger.error(`Buy stock failed: ${error.message}`);
+      
+      if (error instanceof StockNotFoundException || 
+          error instanceof TransactionFailedException ||
+          error instanceof PortfolioUpdateFailedException) {
+        throw error;
+      }
+      
+      throw new TransactionFailedException(symbol, `Failed to execute transaction: ${error.message}`);
     }
-    
-    // Execute purchase via vendor API
-    const purchaseResponse = await this.vendorService.buyStock(symbol, userId, quantity);
-    
-    // Create transaction record
-    const transaction: TransactionResponseDto = {
-      id: uuidv4(),
-      userId,
-      symbol,
-      quantity,
-      price: stock.price,
-      totalAmount: stock.price * quantity,
-      timestamp: new Date(),
-      status: 'completed',
-    };
-    
-    // Update user's portfolio in cache
-    await this.updatePortfolio(userId, symbol, quantity, stock.price);
-    
-    // Store transaction in cache
-    await this.storeTransaction(transaction);
-    
-    return transaction;
   }
 
   private async updatePortfolio(
@@ -60,50 +68,51 @@ export class TransactionsService {
     quantity: number,
     price: number
   ): Promise<void> {
-    const cacheKey = `${this.PORTFOLIO_CACHE_PREFIX}${userId}`;
-    let portfolio = await this.cacheService.get<PortfolioDto>(cacheKey);
-    
-    if (!portfolio) {
-      // Create new portfolio if it doesn't exist
-      portfolio = {
-        userId,
-        totalValue: 0,
-        totalProfit: 0,
-        totalProfitPercentage: 0,
-        items: [],
-      };
-    }
-    
-    // Find if stock already exists in portfolio
-    const existingItem = portfolio.items.find(item => item.symbol === symbol);
-    
-    if (existingItem) {
-      // Update existing position
-      const newTotalQuantity = existingItem.quantity + quantity;
-      const newTotalCost = (existingItem.quantity * existingItem.purchasePrice) + (quantity * price);
+    try {
+      // Get or create portfolio
+      let portfolio = await this.portfolioRepository.findOrCreate(userId);
       
-      existingItem.quantity = newTotalQuantity;
-      existingItem.purchasePrice = newTotalCost / newTotalQuantity; // Weighted average price
-      existingItem.currentPrice = price;
-      existingItem.totalValue = existingItem.quantity * existingItem.currentPrice;
-      existingItem.profit = existingItem.totalValue - (existingItem.quantity * existingItem.purchasePrice);
-      existingItem.profitPercentage = ((existingItem.currentPrice - existingItem.purchasePrice) / existingItem.purchasePrice) * 100;
-    } else {
-      // Add new position
-      const newItem: PortfolioItemDto = {
-        symbol,
-        quantity,
-        purchasePrice: price,
-        currentPrice: price,
-        totalValue: quantity * price,
-        profit: 0,
-        profitPercentage: 0,
-      };
+      // Find if stock already exists in portfolio
+      const existingItem = portfolio.items.find(item => item.symbol === symbol);
       
-      portfolio.items.push(newItem);
+      if (existingItem) {
+        // Update existing position
+        const newTotalQuantity = existingItem.quantity + quantity;
+        const newTotalCost = (existingItem.quantity * existingItem.purchasePrice) + (quantity * price);
+        
+        existingItem.quantity = newTotalQuantity;
+        existingItem.purchasePrice = newTotalCost / newTotalQuantity; // Weighted average price
+        existingItem.currentPrice = price;
+        existingItem.totalValue = existingItem.quantity * existingItem.currentPrice;
+        existingItem.profit = existingItem.totalValue - (existingItem.quantity * existingItem.purchasePrice);
+        existingItem.profitPercentage = ((existingItem.currentPrice - existingItem.purchasePrice) / existingItem.purchasePrice) * 100;
+      } else {
+        // Add new position
+        const newItem: PortfolioItemDto = {
+          symbol,
+          quantity,
+          purchasePrice: price,
+          currentPrice: price,
+          totalValue: quantity * price,
+          profit: 0,
+          profitPercentage: 0,
+        };
+        
+        portfolio.items.push(newItem);
+      }
+      
+      // Recalculate portfolio totals
+      this.recalculatePortfolioTotals(portfolio);
+      
+      // Save updated portfolio
+      await this.portfolioRepository.save(portfolio);
+    } catch (error) {
+      this.logger.error(`Failed to update portfolio: ${error.message}`);
+      throw new PortfolioUpdateFailedException(`Failed to update portfolio after transaction: ${error.message}`);
     }
-    
-    // Recalculate portfolio totals
+  }
+
+  private recalculatePortfolioTotals(portfolio: PortfolioDto): void {
     let totalValue = 0;
     let totalCost = 0;
     
@@ -115,21 +124,5 @@ export class TransactionsService {
     portfolio.totalValue = totalValue;
     portfolio.totalProfit = totalValue - totalCost;
     portfolio.totalProfitPercentage = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0;
-    
-    // Save updated portfolio to cache
-    await this.cacheService.set(cacheKey, portfolio);
-  }
-
-  private async storeTransaction(transaction: TransactionResponseDto): Promise<void> {
-    const cacheKey = `${this.TRANSACTIONS_CACHE_PREFIX}${transaction.userId}`;
-    
-    // Get existing transactions or create empty array
-    const transactions = await this.cacheService.get<TransactionResponseDto[]>(cacheKey) || [];
-    
-    // Add new transaction
-    transactions.push(transaction);
-    
-    // Save updated transactions
-    await this.cacheService.set(cacheKey, transactions);
   }
 } 
