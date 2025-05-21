@@ -20,6 +20,30 @@ env:
   ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}.azurecr.io
   AKS_CLUSTER_RG: ${{ vars.AKS_CLUSTER_RG }}
   AKS_CLUSTER_NAME: ${{ vars.AKS_CLUSTER_NAME }}
+  
+  NODE_ENV: ${{ secrets.NODE_ENV }}
+  PORT: ${{ secrets.PORT }}
+  VENDOR_API_BASE_URL: ${{ secrets.VENDOR_API_BASE_URL }}
+  VENDOR_API_KEY: ${{ secrets.VENDOR_API_KEY }}
+  SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+  SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+  REPORT_RECIPIENT_EMAIL: ${{ secrets.REPORT_RECIPIENT_EMAIL }}
+  CRON_REPORT_EXPRESSION: ${{ secrets.CRON_REPORT_EXPRESSION }}
+  USE_REDIS: ${{ secrets.USE_REDIS }}
+  REDIS_HOST: ${{ secrets.REDIS_HOST }}
+  REDIS_PORT: ${{ secrets.REDIS_PORT }}
+  REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+  REDIS_CACHE_TTL: ${{ secrets.REDIS_CACHE_TTL }}
+  PULSAR_URL: ${{ secrets.PULSAR_URL }}
+  DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+  DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+  DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+  DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+  DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+  DATABASE_SYNCHRONIZE: ${{ secrets.DATABASE_SYNCHRONIZE }}
+  DATABASE_LOGGING: ${{ secrets.DATABASE_LOGGING }}
+  DATABASE_SSL_REJECT_UNAUTHORIZED: ${{ secrets.DATABASE_SSL_REJECT_UNAUTHORIZED }}
+
 
 jobs:
   buildImage:
@@ -39,31 +63,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          
-      - name: Create .env file
-        run: |
-          echo "NODE_ENV=${{ secrets.NODE_ENV }}" >> .env
-          echo "PORT=${{ secrets.PORT }}" >> .env
-          echo "VENDOR_API_BASE_URL=${{ secrets.VENDOR_API_BASE_URL }}" >> .env
-          echo "VENDOR_API_KEY=${{ secrets.VENDOR_API_KEY }}" >> .env
-          echo "SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}" >> .env
-          echo "SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}" >> .env
-          echo "REPORT_RECIPIENT_EMAIL=${{ secrets.REPORT_RECIPIENT_EMAIL }}" >> .env
-          echo "CRON_REPORT_EXPRESSION=${{ secrets.CRON_REPORT_EXPRESSION }}" >> .env
-          echo "USE_REDIS=${{ secrets.USE_REDIS }}" >> .env
-          echo "REDIS_HOST=${{ secrets.REDIS_HOST }}" >> .env
-          echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
-          echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env
-          echo "REDIS_CACHE_TTL=${{ secrets.REDIS_CACHE_TTL }}" >> .env
-          echo "PULSAR_URL=${{ secrets.PULSAR_URL }}" >> .env
-          echo "DATABASE_HOST=${{ secrets.DATABASE_HOST }}" >> .env
-          echo "DATABASE_PORT=${{ secrets.DATABASE_PORT }}" >> .env
-          echo "DATABASE_USERNAME=${{ secrets.DATABASE_USERNAME }}" >> .env
-          echo "DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}" >> .env
-          echo "DATABASE_NAME=${{ secrets.DATABASE_NAME }}" >> .env
-          echo "DATABASE_SYNCHRONIZE=${{ secrets.DATABASE_SYNCHRONIZE }}" >> .env
-          echo "DATABASE_LOGGING=${{ secrets.DATABASE_LOGGING }}" >> .env
-          echo "DATABASE_SSL_REJECT_UNAUTHORIZED=${{ secrets.DATABASE_SSL_REJECT_UNAUTHORIZED }}" >> .env
 
       # Builds and pushes an image up to your Azure Container Registry
       - name: Build and push image to ACR
@@ -111,6 +110,10 @@ jobs:
           use-kubelogin: 'true'
 
       # Apply each manifest file individually
+      - name: Apply ConfigMap
+        run: |
+          kubectl apply -f kubernetes/configmap.yml
+      
       - name: Apply Deployment
         run: |
           kubectl apply -f kubernetes/deployment.yml

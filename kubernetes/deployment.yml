@@ -6,7 +6,7 @@ metadata:
   name: "#{APP_NAME}#"
   namespace: "#{AKS_NAMESPACE}#"
 spec: 
-  replicas: 1
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -36,7 +36,7 @@ spec:
             - containerPort: 3000
           livenessProbe:
             httpGet:
-              path: /api/health
+              path: /api/v1/health
               port: 3000
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -44,7 +44,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /api/health
+              path: /api/v1/health
               port: 3000
             initialDelaySeconds: 15
             periodSeconds: 5
