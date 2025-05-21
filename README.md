@@ -12,7 +12,7 @@ Fuse API is a modern, scalable REST API built with NestJS to interact with finan
 
 ## Architecture Diagram
 
-![Fuse API Architecture](https://raw.githubusercontent.com/andreslon/fuse-api/main/docs/architecture.png)
+![Fuse API Architecture](https://raw.githubusercontent.com/andreslon/fuse-api/dev/docs/architecture.png)
 
 ### System Architecture Overview
 
