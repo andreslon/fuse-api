@@ -1,5 +1,7 @@
 # Fuse API
 
+[![Build and deploy an app to AKS](https://github.com/andreslon/fuse-api/actions/workflows/ci-cd.yaml/badge.svg?branch=dev)](https://github.com/andreslon/fuse-api/actions/workflows/ci-cd.yaml)
+
 ## Descripción General
 Fuse API es una API REST moderna y escalable construida con NestJS para interactuar con datos financieros. Proporciona endpoints para gestionar acciones, carteras, transacciones, informes y más.
 
@@ -7,6 +9,66 @@ Fuse API es una API REST moderna y escalable construida con NestJS para interact
 - **URL de Producción**: [https://fuse-api.neobit.com.co](https://fuse-api.neobit.com.co)
 - **API Key**: `fuse-api-key-a1b2c3d4e5f6` (requerida para todos los endpoints excepto `/`, `/health` y `/health/redis`)
 - **Panel de Monitoreo**: [Dashboard de Fuse API](https://monitoring.neobit.com.co/d/d3d1922e-3022-4e99-9440-f7af0a584834/fuse-api-dashboard?orgId=1)
+
+## Ejemplos de Uso de la API
+
+#### Obtener Información de la API (No requiere API Key)
+```bash
+curl -X GET http://localhost:3000/
+```
+
+#### Verificar Estado de Salud (No requiere API Key)
+```bash
+curl -X GET http://localhost:3000/api/v1/health
+```
+
+#### Flujo de Trabajo Principal
+
+1. Listar Acciones Disponibles
+```bash
+curl -X 'GET' \
+  'http://localhost:3000/api/v1/stocks' \
+  -H 'accept: */*' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6'
+```
+
+2. Ejecutar Transacciones de Compra de Acciones
+```bash
+curl -X 'POST' \
+  'http://localhost:3000/api/v1/transactions/buy' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "userId": "H24G1",
+  "symbol": "NVDA",
+  "quantity": 3,
+  "price": 0.25
+}'
+```
+
+3. Obtener Cartera del Usuario (Lista de Sus Acciones y Cantidades)
+```bash
+curl -X 'GET' \
+  'http://localhost:3000/api/v1/portfolio/H24G1' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6'
+```
+
+4. Generar y Enviar Informe por Correo Electrónico
+```bash
+curl -X 'POST' \
+  'http://localhost:3000/api/v1/reports/send' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "userId": "H24G1",
+  "email": "usuario@ejemplo.com",
+  "includeTransactions": true,
+  "includePortfolio": true
+}'
+```
 
 ## Diagrama de Arquitectura
 

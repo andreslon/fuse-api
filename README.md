@@ -1,5 +1,7 @@
 # Fuse API
 
+[![Build and deploy an app to AKS](https://github.com/andreslon/fuse-api/actions/workflows/ci-cd.yaml/badge.svg?branch=dev)](https://github.com/andreslon/fuse-api/actions/workflows/ci-cd.yaml)
+
 ## Overview
 Fuse API is a modern, scalable REST API built with NestJS to interact with financial data. It provides endpoints for managing stocks, portfolios, transactions, reports, and more.
 
@@ -163,10 +165,52 @@ curl -X GET http://localhost:3000/
 curl -X GET http://localhost:3000/api/v1/health
 ```
 
-#### Get Stocks (API Key Required)
+#### Main Workflow
+
+1. List Available Stocks
 ```bash
-curl -X GET http://localhost:3000/api/v1/stocks \
-  -H "x-api-key: fuse-api-key-a1b2c3d4e5f6"
+curl -X 'GET' \
+  'http://localhost:3000/api/v1/stocks' \
+  -H 'accept: */*' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6'
+```
+
+2. Execute Stock Purchase Transactions
+```bash
+curl -X 'POST' \
+  'http://localhost:3000/api/v1/transactions/buy' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "userId": "H24G1",
+  "symbol": "NVDA",
+  "quantity": 3,
+  "price": 0.25
+}'
+```
+
+3. Get User Portfolio (List of Their Stocks and Quantities)
+```bash
+curl -X 'GET' \
+  'http://localhost:3000/api/v1/portfolio/H24G1' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6'
+```
+
+4. Generate and Send Report by Email
+```bash
+curl -X 'POST' \
+  'http://localhost:3000/api/v1/reports/send' \
+  -H 'accept: application/json' \
+  -H 'x-api-key: fuse-api-key-a1b2c3d4e5f6' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "userId": "H24G1",
+  "email": "user@example.com",
+  "includeTransactions": true,
+  "includePortfolio": true
+}'
 ```
 
 ## Project Architecture
