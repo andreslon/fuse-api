@@ -1,9 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CacheService } from '../../core/cache/cache.service';
+import { Public } from '../../core/guards/public.decorator';
 
 @ApiTags('Health')
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(private readonly cacheService: CacheService) {}
 
