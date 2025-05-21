@@ -5,6 +5,7 @@ import { MockApiProvider } from './provider/mock-api.provider';
 import { FuseApiProvider } from './provider/fuse-api.provider';
 import { ApiProviderFactory } from './provider/api-provider.factory';
 import { ResilienceModule } from '../../core/resilience/resilience.module';
+import { CacheModule } from '../../core/cache/cache.module';
 
 /**
  * Module for external vendor/API integrations
@@ -13,6 +14,7 @@ import { ResilienceModule } from '../../core/resilience/resilience.module';
 @Module({
   imports: [
     ResilienceModule,
+    CacheModule,
     HttpModule.register({
       timeout: 10000, // 10 seconds
       maxRedirects: 5,

@@ -7,6 +7,8 @@ import { ApiProvider } from './api-provider.interface';
 import { StockDto } from '../../stocks/dto/stock.dto';
 import axiosRetry from 'axios-retry';
 import { BaseAppException } from '../../../core/exceptions/base-app.exception';
+import { CacheService } from '../../../core/cache/cache.service';
+import * as redis from 'redis';
 
 interface FuseApiStockResponse {
   status: number;
@@ -30,10 +32,13 @@ export class FuseApiProvider implements ApiProvider {
   private readonly apiKey: string;
   private readonly requestTimeout = 10000; // 10 seconds
   private readonly maxRetries = 3;
+  private readonly cacheTTL: number;
+  private readonly redisClient: redis.RedisClient;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
+    private readonly cacheService: CacheService,
   ) {
     const baseUrl = this.configService.get<string>('VENDOR_API_BASE_URL');
     const apiKey = this.configService.get<string>('VENDOR_API_KEY');
@@ -44,6 +49,23 @@ export class FuseApiProvider implements ApiProvider {
     
     this.baseUrl = baseUrl;
     this.apiKey = apiKey;
+    this.cacheTTL = this.configService.get<number>('REDIS_CACHE_TTL', 300000); // Default to 5 minutes
+
+    // Create a dedicated Redis client for this provider
+    const host = this.configService.get<string>('REDIS_HOST');
+    const port = this.configService.get<number>('REDIS_PORT');
+    const password = this.configService.get<string>('REDIS_PASSWORD');
+    
+    this.redisClient = redis.createClient({
+      host,
+      port,
+      password,
+      prefix: 'fuse_api:'
+    });
+
+    this.redisClient.on('error', (err) => {
+      this.logger.error(`Redis Client Error: ${err.message}`, err.stack);
+    });
 
     // Configure axios-retry
     axiosRetry(this.httpService.axiosRef, {
@@ -70,26 +92,68 @@ export class FuseApiProvider implements ApiProvider {
 
   async getStocks(): Promise<StockDto[]> {
     try {
+      const redisKey = 'stocks';
+      
+      // Intento leer desde Redis directamente
+      const getFromRedis = () => {
+        return new Promise<StockDto[] | null>((resolve) => {
+          this.redisClient.get(redisKey, (err, data) => {
+            if (err || !data) {
+              this.logger.log(`Redis cache miss for key: ${redisKey}`);
+              return resolve(null);
+            }
+            
+            try {
+              const stocks = JSON.parse(data);
+              this.logger.log(`Retrieved ${stocks.length} stocks from Redis cache`);
+              return resolve(stocks);
+            } catch (e) {
+              this.logger.error(`Error parsing Redis data: ${e.message}`);
+              return resolve(null);
+            }
+          });
+        });
+      };
+      
+      // Try to get from Redis first
+      const cachedStocks = await getFromRedis();
+      if (cachedStocks) {
+        return cachedStocks;
+      }
+      
+      // Cache miss, get from API
+      this.logger.log('Cache miss for stocks, fetching from API');
       const url = `${this.baseUrl}/stocks`;
       
       const response = await this.makeRequest<FuseApiStockResponse>(url);
       
-      // Validar la respuesta
+      // Validate the response
       if (!response || !response.data || !response.data.items) {
         this.logger.error('Invalid response structure from Fuse API');
         throw new Error('Invalid response structure from Fuse API');
       }
       
-      // Mapear la respuesta al formato esperado
+      // Map the response to the expected format
       const stocks: StockDto[] = response.data.items.map(item => ({
         symbol: item.symbol,
         name: item.name,
         price: item.price,
-        market: item.sector || 'NASDAQ', // Usamos sector como market o default a NASDAQ
+        market: item.sector || 'NASDAQ', // Use sector as market or default to NASDAQ
         lastUpdated: new Date(item.lastUpdated)
       }));
       
-      this.logger.log(`Retrieved ${stocks.length} stocks from Fuse API`);
+      // Cache in Redis directly
+      this.redisClient.setex(redisKey, this.cacheTTL / 1000, JSON.stringify(stocks), (err) => {
+        if (err) {
+          this.logger.error(`Error caching stocks in Redis: ${err.message}`);
+        } else {
+          this.logger.log(`Cached ${stocks.length} stocks in Redis for ${this.cacheTTL / 1000} seconds`);
+        }
+      });
+      
+      // Set a test key too
+      this.redisClient.setex('test_key', this.cacheTTL / 1000, JSON.stringify({ timestamp: new Date() }));
+      
       return stocks;
     } catch (error) {
       this.logger.error(`Failed to fetch stocks: ${error.message}`, error.stack);
@@ -98,15 +162,57 @@ export class FuseApiProvider implements ApiProvider {
   }
 
   async getStockPrice(symbol: string): Promise<number> {
-    // For this implementation, we'll get the stock details which includes price
-    const url = `${this.baseUrl}/stocks/${symbol}`;
-    
     try {
+      const redisKey = `stock_price_${symbol}`;
+      
+      // Intentamos leer el precio desde Redis primero
+      const getFromRedis = () => {
+        return new Promise<number | null>((resolve) => {
+          this.redisClient.get(redisKey, (err, data) => {
+            if (err || !data) {
+              return resolve(null);
+            }
+            
+            try {
+              const price = parseFloat(data);
+              if (isNaN(price)) {
+                return resolve(null);
+              }
+              this.logger.log(`Retrieved price for ${symbol} from Redis cache: ${price}`);
+              return resolve(price);
+            } catch (e) {
+              return resolve(null);
+            }
+          });
+        });
+      };
+      
+      // Try to get price from Redis
+      const cachedPrice = await getFromRedis();
+      if (cachedPrice !== null) {
+        return cachedPrice;
+      }
+      
+      this.logger.log(`Cache miss for ${symbol} price, fetching from API`);
+      const url = `${this.baseUrl}/stocks/${symbol}`;
+      
       const response = await this.makeRequest<{ status: number; data: { price: number } }>(url);
       if (!response || !response.data || typeof response.data.price !== 'number') {
         throw new Error(`Invalid price data for symbol ${symbol}`);
       }
-      return response.data.price;
+      
+      const price = response.data.price;
+      
+      // Cache directly in Redis
+      this.redisClient.setex(redisKey, this.cacheTTL / 1000, price.toString(), (err) => {
+        if (err) {
+          this.logger.error(`Error caching price for ${symbol} in Redis: ${err.message}`);
+        } else {
+          this.logger.log(`Cached price for ${symbol} in Redis: ${price} for ${this.cacheTTL / 1000} seconds`);
+        }
+      });
+      
+      return price;
     } catch (error) {
       this.logger.error(`Failed to get price for ${symbol}: ${error.message}`);
       throw error;
