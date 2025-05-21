@@ -36,9 +36,8 @@ export class PortfolioRepository {
         const newPortfolio: PortfolioDto = {
           userId,
           totalValue: 0,
-          totalProfit: 0,
-          totalProfitPercentage: 0,
-          items: [],
+          holdings: [],
+          lastUpdated: new Date(),
         };
         
         return await this.save(newPortfolio);

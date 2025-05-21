@@ -1,21 +1,23 @@
-import { IsNotEmpty, IsNumber, IsPositive, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+/**
+ * DTO for stock purchase request
+ */
 export class BuyStockDto {
   @ApiProperty({ description: 'User ID', example: 'user1' })
   @IsNotEmpty()
   @IsString()
   userId: string;
 
-  @ApiProperty({ description: 'Stock symbol', example: 'AAPL' })
+  @ApiProperty({ description: 'Stock symbol to buy', example: 'AAPL' })
   @IsNotEmpty()
   @IsString()
   symbol: string;
 
-  @ApiProperty({ description: 'Number of shares to purchase', example: 5, minimum: 1 })
+  @ApiProperty({ description: 'Number of shares to buy', example: 10, minimum: 1 })
   @IsNotEmpty()
   @IsNumber()
-  @IsPositive()
   @Min(1)
   quantity: number;
 } 

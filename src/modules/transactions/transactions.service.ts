@@ -1,128 +1,97 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { VendorService } from '../vendor/vendor.service';
+import { PortfolioService } from '../portfolio/portfolio.service';
+import { TransactionRepositoryImpl } from './repositories/transaction.repository';
+import { TransactionDto, TransactionType } from './dto/transaction.dto';
 import { BuyStockDto } from './dto/buy-stock.dto';
 import { TransactionResponseDto } from './dto/transaction-response.dto';
-import { VendorService } from '../vendor/vendor.service';
-import { StocksService } from '../stocks/stocks.service';
-import { PortfolioDto, PortfolioItemDto } from '../portfolio/dto/portfolio.dto';
-import { v4 as uuidv4 } from 'uuid';
-import { TransactionRepository } from './repository/transaction.repository';
-import { PortfolioRepository } from '../portfolio/repository/portfolio.repository';
-import { StockNotFoundException } from '../../core/exceptions/domain/stock.exceptions';
 import { TransactionFailedException } from '../../core/exceptions/domain/transaction.exceptions';
-import { PortfolioUpdateFailedException } from '../../core/exceptions/domain/portfolio.exceptions';
+import { StockNotFoundException } from '../../core/exceptions/domain/stock.exceptions';
 
+/**
+ * Service for handling stock transactions
+ */
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
 
   constructor(
+    private readonly transactionRepository: TransactionRepositoryImpl,
     private readonly vendorService: VendorService,
-    private readonly stocksService: StocksService,
-    private readonly transactionRepository: TransactionRepository,
-    private readonly portfolioRepository: PortfolioRepository,
+    private readonly portfolioService: PortfolioService,
   ) {}
 
+  /**
+   * Buy stock
+   * @param buyStockDto Details of the stock purchase
+   * @returns Transaction response
+   */
   async buyStock(buyStockDto: BuyStockDto): Promise<TransactionResponseDto> {
     const { userId, symbol, quantity } = buyStockDto;
     
     try {
-      // Check if stock exists
-      const stock = await this.stocksService.getStockBySymbol(symbol);
+      this.logger.log(`Processing buy order: ${quantity} shares of ${symbol} for user ${userId}`);
       
-      // Execute purchase via vendor API
-      await this.vendorService.buyStock(symbol, userId, quantity);
+      // Get current price from vendor service
+      const price = await this.vendorService.getStockPrice(symbol);
+      
+      // Calculate total value
+      const totalValue = price * quantity;
       
       // Create transaction record
-      const transaction: TransactionResponseDto = {
-        id: uuidv4(),
+      const transaction: TransactionDto = {
         userId,
         symbol,
         quantity,
-        price: stock.price,
-        totalAmount: stock.price * quantity,
+        price,
+        totalValue,
+        type: TransactionType.BUY,
         timestamp: new Date(),
-        status: 'completed',
       };
       
+      // Save the transaction
+      const savedTransaction = await this.transactionRepository.saveTransaction(transaction);
+      
       // Update user's portfolio
-      await this.updatePortfolio(userId, symbol, quantity, stock.price);
+      await this.portfolioService.addStockToPortfolio(userId, symbol, quantity, price);
       
-      // Store transaction
-      return this.transactionRepository.save(transaction);
+      // Create successful response
+      return TransactionResponseDto.createSuccessfulBuyResponse(savedTransaction);
+      
     } catch (error) {
-      this.logger.error(`Buy stock failed: ${error.message}`);
+      this.logger.error(`Failed to buy stock: ${error.message}`);
       
-      if (error instanceof StockNotFoundException || 
-          error instanceof TransactionFailedException ||
-          error instanceof PortfolioUpdateFailedException) {
-        throw error;
-      }
-      
-      throw new TransactionFailedException(symbol, `Failed to execute transaction: ${error.message}`);
-    }
-  }
-
-  private async updatePortfolio(
-    userId: string, 
-    symbol: string, 
-    quantity: number,
-    price: number
-  ): Promise<void> {
-    try {
-      // Get or create portfolio
-      let portfolio = await this.portfolioRepository.findOrCreate(userId);
-      
-      // Find if stock already exists in portfolio
-      const existingItem = portfolio.items.find(item => item.symbol === symbol);
-      
-      if (existingItem) {
-        // Update existing position
-        const newTotalQuantity = existingItem.quantity + quantity;
-        const newTotalCost = (existingItem.quantity * existingItem.purchasePrice) + (quantity * price);
-        
-        existingItem.quantity = newTotalQuantity;
-        existingItem.purchasePrice = newTotalCost / newTotalQuantity; // Weighted average price
-        existingItem.currentPrice = price;
-        existingItem.totalValue = existingItem.quantity * existingItem.currentPrice;
-        existingItem.profit = existingItem.totalValue - (existingItem.quantity * existingItem.purchasePrice);
-        existingItem.profitPercentage = ((existingItem.currentPrice - existingItem.purchasePrice) / existingItem.purchasePrice) * 100;
-      } else {
-        // Add new position
-        const newItem: PortfolioItemDto = {
+      // Map specific errors to appropriate domain exceptions
+      if (error instanceof StockNotFoundException) {
+        throw new TransactionFailedException(
           symbol,
-          quantity,
-          purchasePrice: price,
-          currentPrice: price,
-          totalValue: quantity * price,
-          profit: 0,
-          profitPercentage: 0,
-        };
-        
-        portfolio.items.push(newItem);
+          `Stock not found: ${error.message}`
+        );
       }
       
-      // Recalculate portfolio totals
-      this.recalculatePortfolioTotals(portfolio);
-      
-      // Save updated portfolio
-      await this.portfolioRepository.save(portfolio);
-    } catch (error) {
-      this.logger.error(`Failed to update portfolio: ${error.message}`);
-      throw new PortfolioUpdateFailedException(`Failed to update portfolio after transaction: ${error.message}`);
+      throw new TransactionFailedException(
+        symbol,
+        `Transaction failed: ${error.message}`
+      );
     }
   }
 
-  private recalculatePortfolioTotals(portfolio: PortfolioDto): void {
-    let totalValue = 0;
-    let totalCost = 0;
-    
-    for (const item of portfolio.items) {
-      totalValue += item.totalValue;
-      totalCost += item.quantity * item.purchasePrice;
-    }
-    
-    portfolio.totalValue = totalValue;
-    portfolio.totalProfit = totalValue - totalCost;
-    portfolio.totalProfitPercentage = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0;
+  /**
+   * Get all transactions for a user
+   * @param userId User ID
+   * @returns Array of transactions
+   */
+  async getTransactionsByUserId(userId: string): Promise<TransactionDto[]> {
+    this.logger.log(`Fetching transactions for user: ${userId}`);
+    return this.transactionRepository.getTransactionsByUserId(userId);
+  }
+
+  /**
+   * Get a transaction by ID
+   * @param transactionId Transaction ID
+   * @returns Transaction or null if not found
+   */
+  async getTransactionById(transactionId: string): Promise<TransactionDto | null> {
+    return this.transactionRepository.getTransactionById(transactionId);
   }
 } 

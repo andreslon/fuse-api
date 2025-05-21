@@ -1,67 +1,130 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PortfolioDto } from './dto/portfolio.dto';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PortfolioDto, PortfolioHoldingDto } from './dto/portfolio.dto';
+import { PortfolioRepositoryImpl } from './repositories/portfolio.repository';
 import { StocksService } from '../stocks/stocks.service';
 import { PortfolioNotFoundException, PortfolioUpdateFailedException } from '../../core/exceptions/domain/portfolio.exceptions';
 import { PortfolioRepository } from './repository/portfolio.repository';
 
+/**
+ * Service for managing user portfolios
+ */
 @Injectable()
 export class PortfolioService {
   private readonly logger = new Logger(PortfolioService.name);
 
   constructor(
-    private readonly portfolioRepository: PortfolioRepository,
+    private readonly portfolioRepository: PortfolioRepositoryImpl,
     private readonly stocksService: StocksService,
   ) {}
 
+  /**
+   * Get a user's portfolio
+   * @param userId User ID
+   * @returns Portfolio data
+   */
   async getPortfolio(userId: string): Promise<PortfolioDto> {
     try {
-      // Get portfolio from repository
-      const portfolio = await this.portfolioRepository.findByUserId(userId);
-      
-      // Update current prices and calculations
-      return this.updatePortfolioPrices(portfolio);
+      return await this.portfolioRepository.getPortfolio(userId);
     } catch (error) {
-      if (error instanceof PortfolioNotFoundException) {
-        throw error;
-      }
-      this.logger.error(`Failed to retrieve portfolio: ${error.message}`);
-      throw new PortfolioUpdateFailedException(`Failed to retrieve portfolio: ${error.message}`);
+      this.logger.error(`Failed to get portfolio for user ${userId}: ${error.message}`);
+      throw error;
     }
   }
 
-  private async updatePortfolioPrices(portfolio: PortfolioDto): Promise<PortfolioDto> {
+  /**
+   * Update portfolio values with current stock prices
+   * @param userId User ID
+   * @returns Updated portfolio
+   */
+  async updatePortfolioValue(userId: string): Promise<PortfolioDto> {
+    this.logger.log(`Updating portfolio value for user ${userId}`);
+    
+    // Get the current portfolio
+    const portfolio = await this.getPortfolio(userId);
+    
+    // Calculate new total value based on current prices
+    let totalValue = 0;
+    
+    for (const holding of portfolio.holdings) {
+      const stock = await this.stocksService.getStockBySymbol(holding.symbol);
+      totalValue += stock.price * holding.quantity;
+    }
+    
+    // Update the portfolio
+    portfolio.totalValue = totalValue;
+    portfolio.lastUpdated = new Date();
+    
+    // Save the updated portfolio
+    return this.portfolioRepository.updatePortfolio(userId, portfolio);
+  }
+
+  /**
+   * Add stock to a user's portfolio
+   * @param userId User ID
+   * @param symbol Stock symbol
+   * @param quantity Number of shares
+   * @param price Price per share
+   * @returns Updated portfolio
+   */
+  async addStockToPortfolio(
+    userId: string,
+    symbol: string,
+    quantity: number,
+    price: number,
+  ): Promise<PortfolioDto> {
     try {
-      // Get latest stock prices
-      const stocks = await this.stocksService.getStocks();
-      const stockMap = new Map(stocks.map(stock => [stock.symbol, stock]));
+      // Get user's current portfolio
+      let portfolio: PortfolioDto;
       
-      let totalValue = 0;
-      let totalCost = 0;
-      
-      // Update prices and calculations for each item
-      for (const item of portfolio.items) {
-        const stock = stockMap.get(item.symbol);
-        
-        if (stock) {
-          item.currentPrice = stock.price;
-          item.totalValue = item.quantity * item.currentPrice;
-          item.profit = item.totalValue - (item.quantity * item.purchasePrice);
-          item.profitPercentage = ((item.currentPrice - item.purchasePrice) / item.purchasePrice) * 100;
-          
-          totalValue += item.totalValue;
-          totalCost += item.quantity * item.purchasePrice;
+      try {
+        portfolio = await this.getPortfolio(userId);
+      } catch (error) {
+        // If portfolio doesn't exist, create a new one
+        if (error instanceof NotFoundException) {
+          portfolio = {
+            userId,
+            holdings: [],
+            totalValue: 0,
+            lastUpdated: new Date(),
+          };
+        } else {
+          throw error;
         }
       }
       
-      // Update portfolio totals
-      portfolio.totalValue = totalValue;
-      portfolio.totalProfit = totalValue - totalCost;
-      portfolio.totalProfitPercentage = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0;
+      // Find existing holding for this stock, if any
+      const existingHoldingIndex = portfolio.holdings.findIndex(h => h.symbol === symbol);
       
-      return portfolio;
+      if (existingHoldingIndex >= 0) {
+        // Update existing holding with new average price
+        const existing = portfolio.holdings[existingHoldingIndex];
+        const totalShares = existing.quantity + quantity;
+        const totalCost = (existing.quantity * existing.averagePrice) + (quantity * price);
+        const averagePrice = totalCost / totalShares;
+        
+        portfolio.holdings[existingHoldingIndex] = {
+          symbol,
+          quantity: totalShares,
+          averagePrice,
+        };
+      } else {
+        // Add new holding
+        portfolio.holdings.push({
+          symbol,
+          quantity,
+          averagePrice: price,
+        });
+      }
+      
+      // Update portfolio total value
+      portfolio.totalValue += quantity * price;
+      portfolio.lastUpdated = new Date();
+      
+      // Save updated portfolio
+      return this.portfolioRepository.updatePortfolio(userId, portfolio);
     } catch (error) {
-      this.logger.error(`Failed to update portfolio prices: ${error.message}`);
-      throw new PortfolioUpdateFailedException(`Failed to update portfolio prices: ${error.message}`);
+      this.logger.error(`Failed to add stock to portfolio: ${error.message}`);
+      throw error;
     }
   }
 } 

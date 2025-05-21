@@ -1,7 +1,11 @@
 import { IsNumber, IsOptional, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import { PaginatedResponseInterface, PaginationMeta } from './paginated-response.interface';
 
+/**
+ * DTO for pagination query parameters
+ */
 export class PaginationDto {
   @ApiProperty({ description: 'Number of items to skip', required: false, default: 0, minimum: 0 })
   @IsOptional()
@@ -18,23 +22,18 @@ export class PaginationDto {
   limit: number = 10;
 }
 
-export interface PaginationMeta {
-  offset: number;
-  limit: number;
-  total: number;
-  hasNextPage: boolean;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  meta: PaginationMeta;
-}
-
+/**
+ * Create a paginated response object
+ * @param data The data array to paginate
+ * @param total Total count of items (before pagination)
+ * @param paginationDto The pagination parameters
+ * @returns A structured paginated response
+ */
 export function createPaginatedResponse<T>(
   data: T[],
   total: number,
   paginationDto: PaginationDto,
-): PaginatedResponse<T> {
+): PaginatedResponseInterface<T> {
   const { offset, limit } = paginationDto;
   
   return {

@@ -2,7 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { StocksService } from './stocks.service';
 import { StockDto } from './dto/stock.dto';
 import { ListStocksDto } from './dto/list-stocks.dto';
-import { PaginatedResponse } from '../../shared/pagination/pagination.util';
+import { PaginatedResponseInterface } from '../../shared/pagination/paginated-response.interface';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 @ApiTags('stocks')
@@ -14,7 +14,7 @@ export class StocksController {
   @ApiOperation({ summary: 'List available stocks', description: 'Returns a paginated list of available stocks' })
   @ApiResponse({ status: 200, description: 'List of stocks retrieved successfully' })
   @ApiResponse({ status: 503, description: 'Stock service unavailable' })
-  async getStocks(@Query() queryParams: ListStocksDto): Promise<PaginatedResponse<StockDto>> {
+  async getPaginatedStocks(@Query() queryParams: ListStocksDto): Promise<PaginatedResponseInterface<StockDto>> {
     return this.stocksService.getPaginatedStocks(queryParams);
   }
 

@@ -3,13 +3,32 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsService } from './reports.service';
 import { CacheModule } from '../../core/cache/cache.module';
 import { SchedulerService } from './scheduler.service';
+import { ReportDeliveryService } from './report-delivery.service';
+import { EmailDeliveryStrategy } from './strategy/email-delivery.strategy';
+import { InAppDeliveryStrategy } from './strategy/in-app-delivery.strategy';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     CacheModule,
   ],
-  providers: [ReportsService, SchedulerService],
-  exports: [ReportsService, SchedulerService],
+  providers: [
+    ReportsService,
+    SchedulerService,
+    ReportDeliveryService,
+    EmailDeliveryStrategy,
+    InAppDeliveryStrategy,
+  ],
+  exports: [ReportsService, SchedulerService, ReportDeliveryService],
 })
-export class ReportsModule {} 
+export class ReportsModule {
+  constructor(
+    private readonly reportDeliveryService: ReportDeliveryService,
+    private readonly emailDeliveryStrategy: EmailDeliveryStrategy,
+    private readonly inAppDeliveryStrategy: InAppDeliveryStrategy,
+  ) {
+    // Register all delivery strategies
+    this.reportDeliveryService.registerStrategy(this.emailDeliveryStrategy);
+    this.reportDeliveryService.registerStrategy(this.inAppDeliveryStrategy);
+  }
+} 

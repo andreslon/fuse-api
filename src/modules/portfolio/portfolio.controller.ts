@@ -14,7 +14,7 @@ export class PortfolioController {
   @ApiResponse({ status: 200, description: 'Portfolio retrieved successfully', type: PortfolioDto })
   @ApiResponse({ status: 404, description: 'Portfolio not found' })
   @ApiResponse({ status: 500, description: 'Failed to retrieve portfolio' })
-  async getPortfolio(@Param('userId') userId: string): Promise<PortfolioDto> {
+  async getPortfolioByUserId(@Param('userId') userId: string): Promise<PortfolioDto> {
     return this.portfolioService.getPortfolio(userId);
   }
 } 

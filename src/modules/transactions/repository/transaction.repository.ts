@@ -15,10 +15,10 @@ export class TransactionRepository {
   }
 
   async save(transaction: TransactionResponseDto): Promise<TransactionResponseDto> {
-    const cacheKey = `${this.TRANSACTIONS_CACHE_PREFIX}${transaction.userId}`;
+    const cacheKey = `${this.TRANSACTIONS_CACHE_PREFIX}${transaction.transaction.userId}`;
     
     // Get existing transactions
-    const transactions = await this.findAllByUserId(transaction.userId);
+    const transactions = await this.findAllByUserId(transaction.transaction.userId);
     
     // Add new transaction
     transactions.push(transaction);

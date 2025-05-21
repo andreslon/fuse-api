@@ -4,7 +4,8 @@ import { CacheService } from '../../core/cache/cache.service';
 import { StockDto } from './dto/stock.dto';
 import { StockNotFoundException, StockServiceUnavailableException } from '../../core/exceptions/domain/stock.exceptions';
 import { ListStocksDto } from './dto/list-stocks.dto';
-import { PaginatedResponse, createPaginatedResponse } from '../../shared/pagination/pagination.util';
+import { PaginationDto, createPaginatedResponse } from '../../shared/pagination/pagination.util';
+import { PaginatedResponseInterface } from '../../shared/pagination/paginated-response.interface';
 
 @Injectable()
 export class StocksService {
@@ -17,7 +18,7 @@ export class StocksService {
     private readonly cacheService: CacheService,
   ) {}
 
-  async getPaginatedStocks(queryParams: ListStocksDto): Promise<PaginatedResponse<StockDto>> {
+  async getPaginatedStocks(queryParams: ListStocksDto): Promise<PaginatedResponseInterface<StockDto>> {
     try {
       const stocks = await this.getStocks();
       const filteredStocks = this.filterStocks(stocks, queryParams);
@@ -91,7 +92,7 @@ export class StocksService {
     return filteredStocks;
   }
 
-  private paginateStocks(stocks: StockDto[], queryParams: ListStocksDto): StockDto[] {
+  private paginateStocks(stocks: StockDto[], queryParams: PaginationDto): StockDto[] {
     const { offset, limit } = queryParams;
     return stocks.slice(offset, offset + limit);
   }
