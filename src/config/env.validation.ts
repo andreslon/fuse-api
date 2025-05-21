@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsString, validateSync, IsOptional, IsUrl, Matches } from 'class-validator';
+import { IsEnum, IsNumber, IsString, validateSync, IsOptional, IsUrl, Matches, IsBoolean } from 'class-validator';
 import { plainToClass } from 'class-transformer';
 
 enum Environment {
@@ -55,6 +55,35 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   PULSAR_URL?: string = 'pulsar://localhost:6650';
+  
+  // Database configuration
+  @IsOptional()
+  @IsString()
+  DATABASE_HOST: string = 'fuse-pgsql.postgres.database.azure.com';
+
+  @IsOptional()
+  @IsNumber()
+  DATABASE_PORT: number = 5432;
+
+  @IsOptional()
+  @IsString()
+  DATABASE_USERNAME: string = 'usradmin';
+
+  @IsOptional()
+  @IsString()
+  DATABASE_PASSWORD: string = '95GNPi1kF&dH1pHc';
+
+  @IsOptional()
+  @IsString()
+  DATABASE_NAME: string = 'fuse_db';
+
+  @IsOptional()
+  @IsBoolean()
+  DATABASE_SYNCHRONIZE: boolean = false;
+
+  @IsOptional()
+  @IsBoolean()
+  DATABASE_LOGGING: boolean = true;
 }
 
 export function validate(config: Record<string, unknown>) {

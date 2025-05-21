@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { VendorService } from '../vendor/vendor.service';
 import { PortfolioService } from '../portfolio/portfolio.service';
 import { StocksService } from '../stocks/stocks.service';
+import { UsersService } from '../users/users.service';
 import { TransactionRepositoryImpl } from './repositories/transaction.repository';
 import { TransactionDto, TransactionType } from './dto/transaction.dto';
 import { BuyStockDto } from './dto/buy-stock.dto';
@@ -23,6 +24,7 @@ export class TransactionsService {
     private readonly vendorService: VendorService,
     private readonly portfolioService: PortfolioService,
     private readonly stocksService: StocksService,
+    private readonly usersService: UsersService,
   ) {}
 
   /**
@@ -30,41 +32,44 @@ export class TransactionsService {
    * Includes validation for 2% price tolerance rule
    */
   async buyStock(buyStockDto: BuyStockDto): Promise<TransactionResponseDto> {
-    const { symbol, quantity, userId } = buyStockDto;
+    const { symbol, quantity, userId, price } = buyStockDto;
     
     try {
-      this.logger.log(`Processing buy order: ${quantity} shares of ${symbol} for user ${userId}`);
+      this.logger.log(`Processing buy order: ${quantity} shares of ${symbol} at $${price} for user ${userId}`);
       
-      // 1. Get current stock price
-      const currentPrice = await this.stocksService.getStockPrice(symbol);
-      this.logger.log(`Current price for ${symbol}: ${currentPrice}`);
+      // 0. Check if user exists, if not, create it
+      const userExists = await this.usersService.userExists(userId);
+      if (!userExists) {
+        this.logger.log(`User ${userId} does not exist, creating new user automatically`);
+        await this.usersService.createUser(userId, true);
+      }
       
-      // 2. Execute purchase through the vendor API
-      const result = await this.vendorService.buyStock(symbol, quantity);
+      // 1. Get current market price to check tolerance
+      const currentMarketPrice = await this.stocksService.getStockPrice(symbol);
+      this.logger.log(`Current market price for ${symbol}: ${currentMarketPrice}`);
       
-      // 3. Get the actual execution price from the result
-      const executionPrice = await this.getExecutionPrice(result.id, symbol);
-      this.logger.log(`Execution price for ${symbol}: ${executionPrice}`);
+      // 2. Validate price tolerance (2%)
+      this.validatePriceTolerance(currentMarketPrice, price);
       
-      // 4. Validate price tolerance (2%)
-      this.validatePriceTolerance(currentPrice, executionPrice);
+      // 3. Execute purchase through the vendor API with the provided price
+      const result = await this.vendorService.buyStock(symbol, quantity, price);
       
-      // 5. Update user's portfolio
-      await this.portfolioService.addStockToPortfolio(userId, symbol, quantity, executionPrice);
+      // 4. Update user's portfolio
+      await this.portfolioService.addStockToPortfolio(userId, symbol, quantity, price);
       
-      // 6. Create transaction record
+      // 5. Create transaction record
       const transaction: TransactionDto = {
         id: result.id,
         userId,
         symbol,
         quantity,
-        price: executionPrice,
-        totalValue: executionPrice * quantity,
+        price: price,
+        totalValue: price * quantity,
         type: TransactionType.BUY,
         timestamp: new Date(),
       };
       
-      // 7. Return success response
+      // 6. Return success response
       return {
         transaction,
         status: 'SUCCESS',
@@ -128,6 +133,14 @@ export class TransactionsService {
    */
   async getTransactionsByUserId(userId: string): Promise<TransactionDto[]> {
     this.logger.log(`Fetching transactions for user: ${userId}`);
+    
+    // Check if user exists, if not, create it
+    const userExists = await this.usersService.userExists(userId);
+    if (!userExists) {
+      this.logger.log(`User ${userId} does not exist, creating new user automatically`);
+      await this.usersService.createUser(userId, true);
+    }
+    
     return this.transactionRepository.getTransactionsByUserId(userId);
   }
 

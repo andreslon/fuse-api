@@ -113,26 +113,37 @@ export class FuseApiProvider implements ApiProvider {
     }
   }
 
-  async buyStock(symbol: string, quantity: number): Promise<{ id: string; status: string }> {
+  async buyStock(symbol: string, quantity: number, price: number): Promise<{ id: string; status: string }> {
     const url = `${this.baseUrl}/stocks/${symbol}/buy`;
     
     try {
       const response = await this.makeRequest<{ 
         status: number; 
-        data: { id: string; status: string } 
+        message: string;
+        data: { 
+          order: {
+            symbol: string;
+            quantity: number;
+            price: number;
+            total: number;
+          }
+        } 
       }>(
         url,
         'POST',
-        { quantity },
+        { quantity, price },
       );
       
-      if (!response || !response.data || !response.data.id) {
+      if (!response || !response.data || !response.data.order) {
         throw new Error(`Invalid buy response for symbol ${symbol}`);
       }
       
+      // Generate a unique ID based on the order details
+      const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      
       return {
-        id: response.data.id,
-        status: response.data.status || 'completed'
+        id: orderId,
+        status: 'completed'
       };
     } catch (error) {
       this.logger.error(`Failed to buy stock ${symbol}: ${error.message}`);

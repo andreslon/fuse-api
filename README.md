@@ -28,6 +28,15 @@ REPORT_RECIPIENT_EMAIL=admin@example.com
 
 # Scheduler configuration
 CRON_REPORT_EXPRESSION=0 20 * * *  # Run at 8:00 PM every day
+
+# Database configuration
+DATABASE_HOST=fuse-pgsql.postgres.database.azure.com
+DATABASE_PORT=5432
+DATABASE_USERNAME=usradmin
+DATABASE_PASSWORD=your_password_here
+DATABASE_NAME=fuse_db
+DATABASE_SYNCHRONIZE=false
+DATABASE_LOGGING=true
 ```
 
 ## Installation
@@ -40,6 +49,15 @@ npm install
 ```
 
 3. Create a `.env` file with the required environment variables
+4. Initialize the database:
+
+```bash
+# Option 1: Run the initialization script directly
+psql -h $DATABASE_HOST -U $DATABASE_USERNAME -d $DATABASE_NAME -f database/init.sql
+
+# Option 2: Enable TypeORM synchronize for development
+# Set DATABASE_SYNCHRONIZE=true in your .env file (not recommended for production)
+```
 
 ## Running the Application
 
@@ -70,15 +88,15 @@ This project follows clean architecture principles:
 - **Modules**: Feature-focused modules for different business domains
 - **DTOs**: Clear data transfer objects for request/response handling
 - **Services**: Business logic separated from controllers
-- **Repository Pattern**: Abstract data access
+- **Repository Pattern**: Abstract data access with TypeORM integration
 - **Strategy Pattern**: Used for report delivery mechanisms
 - **Exception Handling**: Centralized exception filters and custom exceptions
 
 ## Key Components
 
 - **Stock Module**: List available stocks
-- **Portfolio Module**: Manage user portfolios
-- **Transaction Module**: Handle buy operations with price tolerance checks
+- **Portfolio Module**: Manage user portfolios with database persistence
+- **Transaction Module**: Handle buy operations with price tolerance checks and database storage
 - **Vendor Integration**: External API connection with resilience patterns
 - **Report Module**: Generates and sends daily reports via email
 
@@ -90,3 +108,5 @@ This project follows clean architecture principles:
 - **Resilience**: Circuit breakers, retries, and timeouts
 - **Scheduling**: Automated tasks using cron expressions
 - **Documentation**: Swagger/OpenAPI docs for API endpoints
+- **Database**: PostgreSQL with TypeORM for data persistence
+- **Migrations**: Database schema management

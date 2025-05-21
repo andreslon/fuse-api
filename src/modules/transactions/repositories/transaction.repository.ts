@@ -1,47 +1,67 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { TransactionRepository } from './transaction-repository.interface';
-import { TransactionDto } from '../dto/transaction.dto';
-import { CacheService } from '../../../core/cache/cache.service';
+import { TransactionDto, TransactionType } from '../dto/transaction.dto';
+import { Transaction } from '../entities/transaction.entity';
 
 /**
  * Implementation of the transaction repository
- * Uses cache for data storage in this demo
- * In a real application, this would use a database
+ * Uses TypeORM for database operations
  */
 @Injectable()
 export class TransactionRepositoryImpl implements TransactionRepository {
   private readonly logger = new Logger(TransactionRepositoryImpl.name);
-  private readonly TRANSACTIONS_CACHE_KEY = 'transactions';
-  private readonly CACHE_TTL = 86400000; // 24 hours
 
-  constructor(private readonly cacheService: CacheService) {}
+  constructor(
+    @InjectRepository(Transaction)
+    private readonly transactionRepo: Repository<Transaction>,
+  ) {}
 
   /**
    * Save a new transaction
    */
-  async saveTransaction(transaction: TransactionDto): Promise<TransactionDto> {
+  async saveTransaction(transactionDto: TransactionDto): Promise<TransactionDto> {
     try {
       // Generate an ID if not provided
-      if (!transaction.id) {
-        transaction.id = this.generateTransactionId();
+      if (!transactionDto.id) {
+        transactionDto.id = this.generateTransactionId();
       }
       
       // Set timestamp if not provided
-      if (!transaction.timestamp) {
-        transaction.timestamp = new Date();
+      if (!transactionDto.timestamp) {
+        transactionDto.timestamp = new Date();
       }
       
-      // Get existing transactions
-      const transactions = await this.getAllTransactions();
+      // Create entity from DTO
+      const transaction = this.transactionRepo.create({
+        id: transactionDto.id,
+        userId: transactionDto.userId,
+        symbol: transactionDto.symbol,
+        quantity: transactionDto.quantity,
+        price: transactionDto.price,
+        totalValue: transactionDto.totalValue,
+        type: transactionDto.type,
+        confirmationId: `conf_${transactionDto.id}`,
+        status: 'SUCCESS',
+      });
       
-      // Add new transaction
-      transactions.push(transaction);
+      // Save to database
+      const savedTransaction = await this.transactionRepo.save(transaction);
       
-      // Save updated list
-      await this.cacheService.set(this.TRANSACTIONS_CACHE_KEY, transactions, this.CACHE_TTL);
+      this.logger.log(`Transaction saved: ${savedTransaction.id}`);
       
-      this.logger.log(`Transaction saved: ${transaction.id}`);
-      return transaction;
+      // Map back to DTO
+      return {
+        id: savedTransaction.id,
+        userId: savedTransaction.userId,
+        symbol: savedTransaction.symbol,
+        quantity: Number(savedTransaction.quantity),
+        price: Number(savedTransaction.price),
+        totalValue: Number(savedTransaction.totalValue),
+        type: savedTransaction.type,
+        timestamp: savedTransaction.createdAt,
+      };
     } catch (error) {
       this.logger.error(`Failed to save transaction: ${error.message}`);
       throw error;
@@ -52,26 +72,45 @@ export class TransactionRepositoryImpl implements TransactionRepository {
    * Get all transactions for a user
    */
   async getTransactionsByUserId(userId: string): Promise<TransactionDto[]> {
-    const transactions = await this.getAllTransactions();
-    return transactions.filter(t => t.userId === userId);
+    const transactions = await this.transactionRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+    
+    return transactions.map(transaction => ({
+      id: transaction.id,
+      userId: transaction.userId,
+      symbol: transaction.symbol,
+      quantity: Number(transaction.quantity),
+      price: Number(transaction.price),
+      totalValue: Number(transaction.totalValue),
+      type: transaction.type,
+      timestamp: transaction.createdAt,
+    }));
   }
 
   /**
    * Get a specific transaction by ID
    */
   async getTransactionById(transactionId: string): Promise<TransactionDto | null> {
-    const transactions = await this.getAllTransactions();
-    const transaction = transactions.find(t => t.id === transactionId);
+    const transaction = await this.transactionRepo.findOne({
+      where: { id: transactionId },
+    });
     
-    return transaction || null;
-  }
-
-  /**
-   * Get all transactions from cache
-   */
-  private async getAllTransactions(): Promise<TransactionDto[]> {
-    const transactions = await this.cacheService.get<TransactionDto[]>(this.TRANSACTIONS_CACHE_KEY);
-    return transactions || [];
+    if (!transaction) {
+      return null;
+    }
+    
+    return {
+      id: transaction.id,
+      userId: transaction.userId,
+      symbol: transaction.symbol,
+      quantity: Number(transaction.quantity),
+      price: Number(transaction.price),
+      totalValue: Number(transaction.totalValue),
+      type: transaction.type,
+      timestamp: transaction.createdAt,
+    };
   }
 
   /**
